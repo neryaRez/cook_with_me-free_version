@@ -1,0 +1,10 @@
+project_name                      = "cook-with-me-free-version"
+environment                       = "dev"
+aws_region                        = "us-east-1"
+tf_state_bucket                   = "cook-with-me-free-version-dev-tfstate-455715798206-us-east-1"
+github_owner                      = "neryaRez"
+github_repo                       = "cook_with_me-free_version"
+github_branch                     = "main"
+create_github_oidc_provider       = false
+existing_github_oidc_provider_arn = "arn:aws:iam::455715798206:oidc-provider/token.actions.githubusercontent.com"
+github_actions_role_name          = "cook-with-me-free-version-dev-github-actions-role"
