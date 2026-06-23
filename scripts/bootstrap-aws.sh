@@ -19,6 +19,22 @@ clean_name() {
     | sed 's/-$//'
 }
 
+normalize_database_url() {
+  local value="${1:-}"
+
+  if [[ -z "$value" ]]; then
+    echo ""
+    return 0
+  fi
+
+  if [[ "$value" == mysql://* ]]; then
+    echo "mysql+pymysql://${value#mysql://}"
+    return 0
+  fi
+
+  echo "$value"
+}
+
 command_exists() {
   command -v "$1" >/dev/null 2>&1
 }
@@ -157,6 +173,7 @@ ensure_runtime_secret() {
   echo
 
   read -r -p "DATABASE_URL: " DATABASE_URL_VALUE
+  DATABASE_URL_VALUE="$(normalize_database_url "$DATABASE_URL_VALUE")"
   read -r -s -p "OPENAI_API_KEY: " OPENAI_API_KEY_VALUE
   echo
 
