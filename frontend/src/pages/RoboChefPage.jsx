@@ -1,5 +1,6 @@
 import ChatInterface from '../components/ChatInterface.jsx'
 import { ChefHatIcon, SparklesIcon } from '../components/icons.jsx'
+import { USE_REAL_API } from '../services/api.js'
 
 export default function RoboChefPage() {
   return (
@@ -15,7 +16,7 @@ export default function RoboChefPage() {
         </p>
         <span className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-ember/10 px-3 py-1 text-xs font-medium text-ember-light">
           <SparklesIcon className="h-3.5 w-3.5" />
-          Responses are simulated for this preview
+          {USE_REAL_API ? 'Connected to the Cook With Me backend' : 'Responses are simulated for this preview'}
         </span>
       </div>
 

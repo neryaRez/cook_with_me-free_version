@@ -379,15 +379,16 @@ echo
 echo "==> Detecting GitHub Actions OIDC provider..."
 EXISTING_GITHUB_OIDC_PROVIDER_ARN="$(detect_github_oidc_provider_arn || true)"
 
-CREATE_GITHUB_OIDC_PROVIDER="true"
-
 if [[ -n "$EXISTING_GITHUB_OIDC_PROVIDER_ARN" ]]; then
-  echo "✅ Existing GitHub OIDC provider found and will remain managed by Terraform: $EXISTING_GITHUB_OIDC_PROVIDER_ARN"
+  # AWS allows only one OIDC provider per URL per account. Reuse the
+  # existing one instead of trying to create a duplicate (which would fail
+  # with EntityAlreadyExists) or silently dropping its ARN.
+  CREATE_GITHUB_OIDC_PROVIDER="false"
+  echo "✅ Existing GitHub OIDC provider found and will be reused: $EXISTING_GITHUB_OIDC_PROVIDER_ARN"
 else
+  CREATE_GITHUB_OIDC_PROVIDER="true"
   echo "ℹ️ No GitHub OIDC provider found. Terraform bootstrap will create one."
 fi
-
-EXISTING_GITHUB_OIDC_PROVIDER_ARN=""
 
 echo
 echo "============================================================"

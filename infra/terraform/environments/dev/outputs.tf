@@ -102,3 +102,8 @@ output "backend_image" {
   description = "Backend Docker image expected by EC2."
   value       = local.backend_image
 }
+
+output "backend_api_base_url" {
+  description = "Backend API base URL through CloudFront."
+  value       = "https://${aws_cloudfront_distribution.backend_api.domain_name}"
+}

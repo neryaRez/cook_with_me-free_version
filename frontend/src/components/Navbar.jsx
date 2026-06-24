@@ -1,5 +1,7 @@
 import { NavLink } from 'react-router-dom'
-import { ChefHatIcon, PlusIcon, SparklesIcon } from './icons.jsx'
+import { ChefHatIcon, PlusIcon, SparklesIcon, BookmarkIcon } from './icons.jsx'
+import { useAuth } from '../context/AuthContext.jsx'
+import UserMenu from './UserMenu.jsx'
 
 const navLinks = [
   { to: '/', label: 'Home' },
@@ -8,6 +10,8 @@ const navLinks = [
 ]
 
 export default function Navbar() {
+  const { user } = useAuth()
+
   return (
     <header className="sticky top-0 z-40 border-b border-border-subtle/70 bg-ink/85 backdrop-blur-md">
       <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
@@ -40,6 +44,21 @@ export default function Navbar() {
         </nav>
 
         <div className="flex items-center gap-2">
+          {user && (
+            <NavLink
+              to="/my-recipes"
+              className={({ isActive }) =>
+                `hidden items-center gap-1.5 rounded-full border px-3.5 py-2 text-sm font-medium transition-colors sm:flex ${
+                  isActive
+                    ? 'border-ember/40 text-cream'
+                    : 'border-border-subtle/70 text-muted hover:border-ember/40 hover:text-cream'
+                }`
+              }
+            >
+              <BookmarkIcon className="h-4 w-4 text-ember-light" />
+              My Recipes
+            </NavLink>
+          )}
           <NavLink
             to="/robo-chef"
             className="hidden items-center gap-1.5 rounded-full border border-border-subtle/70 px-3.5 py-2 text-sm font-medium text-muted transition-colors hover:border-ember/40 hover:text-cream sm:flex md:hidden"
@@ -48,13 +67,24 @@ export default function Navbar() {
             Robo Chef
           </NavLink>
           <NavLink
-            to="/create"
+            to={user ? '/create' : '/login'}
             className="flex items-center gap-1.5 rounded-full bg-ember px-4 py-2 text-sm font-semibold text-cream shadow-md shadow-ember/25 transition-transform hover:scale-[1.03] active:scale-[0.98]"
           >
             <PlusIcon className="h-4 w-4" />
             <span className="hidden sm:inline">New Recipe</span>
             <span className="sm:hidden">New</span>
           </NavLink>
+
+          {user ? (
+            <UserMenu user={user} />
+          ) : (
+            <NavLink
+              to="/login"
+              className="flex items-center rounded-full border border-border-subtle/70 px-4 py-2 text-sm font-medium text-cream transition-colors hover:border-ember/40"
+            >
+              Sign in
+            </NavLink>
+          )}
         </div>
       </div>
 
@@ -73,6 +103,18 @@ export default function Navbar() {
             {link.label}
           </NavLink>
         ))}
+        {user && (
+          <NavLink
+            to="/my-recipes"
+            className={({ isActive }) =>
+              `whitespace-nowrap rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors ${
+                isActive ? 'bg-ember text-cream' : 'text-muted hover:text-cream'
+              }`
+            }
+          >
+            My Recipes
+          </NavLink>
+        )}
       </nav>
     </header>
   )

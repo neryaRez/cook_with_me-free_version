@@ -1,0 +1,265 @@
+name: update
+
+# Day-to-day CI/CD after build_start.yml has created the environment once.
+# Redeploys only what changed: frontend -> S3/CloudFront, backend -> ECR/SSM,
+# infra -> terraform apply. Custom domain state is preserved, never decided
+# here - only provision_domain.yml turns it on.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: cook-with-me-dev-environment
+  cancel-in-progress: false
+
+jobs:
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      frontend: ${{ steps.filter.outputs.frontend }}
+      backend: ${{ steps.filter.outputs.backend }}
+      infra: ${{ steps.filter.outputs.infra }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            frontend:
+              - 'frontend/**'
+            backend:
+              - 'backend/**'
+            infra:
+              - 'infra/terraform/environments/dev/**'
+              - 'infra/terraform/modules/**'
+
+  terraform:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.frontend == 'true' || needs.detect-changes.outputs.backend == 'true' || needs.detect-changes.outputs.infra == 'true'
+    runs-on: ubuntu-latest
+    outputs:
+      backend_ecr_repository_url: ${{ steps.tf_outputs.outputs.backend_ecr_repository_url }}
+      backend_instance_id: ${{ steps.tf_outputs.outputs.backend_instance_id }}
+      backend_api_base_url: ${{ steps.tf_outputs.outputs.backend_api_base_url }}
+      cognito_user_pool_id: ${{ steps.tf_outputs.outputs.cognito_user_pool_id }}
+      cognito_app_client_id: ${{ steps.tf_outputs.outputs.cognito_app_client_id }}
+      static_site_bucket_name: ${{ steps.tf_outputs.outputs.static_site_bucket_name }}
+      cloudfront_distribution_id: ${{ steps.tf_outputs.outputs.cloudfront_distribution_id }}
+      frontend_base_url: ${{ steps.tf_outputs.outputs.frontend_base_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify bootstrap variables are configured
+        run: |
+          missing=0
+          for name in AWS_REGION AWS_GITHUB_ACTIONS_ROLE_ARN TF_STATE_BUCKET TF_DEV_STATE_KEY; do
+            value="${!name}"
+            if [ -z "$value" ]; then
+              echo "::error::Required repository variable $name is not set. Run ./scripts/bootstrap-aws.sh first."
+              missing=1
+            fi
+          done
+          [ "$missing" -eq 0 ]
+        env:
+          AWS_REGION: ${{ vars.AWS_REGION }}
+          AWS_GITHUB_ACTIONS_ROLE_ARN: ${{ vars.AWS_GITHUB_ACTIONS_ROLE_ARN }}
+          TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+          TF_DEV_STATE_KEY: ${{ vars.TF_DEV_STATE_KEY }}
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_GITHUB_ACTIONS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.15.5"
+
+      - name: Generate backend.tf
+        working-directory: infra/terraform/environments/dev
+        run: |
+          cat > backend.tf <<EOF
+          terraform {
+            backend "s3" {
+              bucket       = "${{ vars.TF_STATE_BUCKET }}"
+              key          = "${{ vars.TF_DEV_STATE_KEY }}"
+              region       = "${{ vars.AWS_REGION }}"
+              encrypt      = true
+              use_lockfile = true
+            }
+          }
+          EOF
+
+      - name: Terraform init
+        working-directory: infra/terraform/environments/dev
+        run: terraform init -input=false
+
+      # Only an infra change runs plan/apply; frontend/backend-only pushes
+      # just read existing outputs. enable_custom_domain is read from state,
+      # not decided here - see provision_domain.yml.
+      - name: Determine current custom domain state
+        if: needs.detect-changes.outputs.infra == 'true'
+        id: domain_state
+        working-directory: infra/terraform/environments/dev
+        run: |
+          CURRENT=$(terraform output -raw custom_domain_enabled 2>/dev/null || echo "false")
+          echo "enabled=$CURRENT" >> "$GITHUB_OUTPUT"
+
+      - name: Generate terraform.tfvars
+        if: needs.detect-changes.outputs.infra == 'true'
+        working-directory: infra/terraform/environments/dev
+        run: |
+          cat > terraform.tfvars <<EOF
+          project_name         = "${{ vars.PROJECT_NAME }}"
+          environment          = "${{ vars.ENVIRONMENT }}"
+          aws_region           = "${{ vars.AWS_REGION }}"
+          enable_custom_domain = ${{ steps.domain_state.outputs.enabled }}
+          root_domain          = "${{ vars.ROOT_DOMAIN }}"
+          frontend_subdomain   = "${{ vars.FRONTEND_SUBDOMAIN }}"
+          route53_dns_role_arn = "${{ vars.ROUTE53_DNS_ROLE_ARN }}"
+          app_secret_name      = "${{ vars.SECRET_NAME }}"
+          EOF
+
+      - name: Terraform validate
+        if: needs.detect-changes.outputs.infra == 'true'
+        working-directory: infra/terraform/environments/dev
+        run: terraform validate
+
+      - name: Terraform plan
+        if: needs.detect-changes.outputs.infra == 'true'
+        working-directory: infra/terraform/environments/dev
+        run: terraform plan -input=false -out=tfplan
+
+      - name: Terraform apply
+        if: needs.detect-changes.outputs.infra == 'true'
+        working-directory: infra/terraform/environments/dev
+        run: terraform apply -input=false -auto-approve tfplan
+
+      - name: Capture Terraform outputs
+        id: tf_outputs
+        working-directory: infra/terraform/environments/dev
+        run: |
+          {
+            echo "backend_ecr_repository_url=$(terraform output -raw backend_ecr_repository_url)"
+            echo "backend_instance_id=$(terraform output -raw backend_instance_id)"
+            echo "backend_api_base_url=$(terraform output -raw backend_api_base_url)"
+            echo "cognito_user_pool_id=$(terraform output -raw cognito_user_pool_id)"
+            echo "cognito_app_client_id=$(terraform output -raw cognito_app_client_id)"
+            echo "static_site_bucket_name=$(terraform output -raw static_site_bucket_name)"
+            echo "cloudfront_distribution_id=$(terraform output -raw cloudfront_distribution_id)"
+            echo "frontend_base_url=$(terraform output -raw frontend_base_url)"
+          } >> "$GITHUB_OUTPUT"
+
+  # Runs on backend changes OR infra changes: an infra change can replace
+  # the EC2 instance or alter user_data/IAM/SG, so the backend needs to be
+  # redeployed/restarted safely either way.
+  deploy-backend:
+    needs: [detect-changes, terraform]
+    if: needs.detect-changes.outputs.backend == 'true' || needs.detect-changes.outputs.infra == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_GITHUB_ACTIONS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Build and push backend image
+        working-directory: backend
+        run: |
+          IMAGE_URL="${{ needs.terraform.outputs.backend_ecr_repository_url }}"
+          ECR_REGISTRY="$(echo "$IMAGE_URL" | cut -d/ -f1)"
+          aws ecr get-login-password --region "${{ vars.AWS_REGION }}" \
+            | docker login --username AWS --password-stdin "$ECR_REGISTRY"
+          docker build -t "$IMAGE_URL:${{ github.sha }}" -t "$IMAGE_URL:latest" .
+          docker push "$IMAGE_URL:${{ github.sha }}"
+          docker push "$IMAGE_URL:latest"
+
+      - name: Deploy backend via SSM
+        run: |
+          INSTANCE_ID="${{ needs.terraform.outputs.backend_instance_id }}"
+          ECR_REGISTRY="$(echo "${{ needs.terraform.outputs.backend_ecr_repository_url }}" | cut -d/ -f1)"
+
+          COMMAND_ID=$(aws ssm send-command \
+            --instance-ids "$INSTANCE_ID" \
+            --document-name "AWS-RunShellScript" \
+            --comment "Deploy cook-with-me backend (update)" \
+            --parameters commands="[
+              \"cd /opt/cook-with-me\",
+              \"aws ecr get-login-password --region ${{ vars.AWS_REGION }} | docker login --username AWS --password-stdin $ECR_REGISTRY\",
+              \"docker compose pull\",
+              \"docker compose up -d\"
+            ]" \
+            --query "Command.CommandId" --output text)
+
+          aws ssm wait command-executed --command-id "$COMMAND_ID" --instance-id "$INSTANCE_ID" || true
+
+          STATUS=$(aws ssm get-command-invocation --command-id "$COMMAND_ID" --instance-id "$INSTANCE_ID" --query "Status" --output text)
+          echo "SSM command status: $STATUS"
+          if [ "$STATUS" != "Success" ]; then
+            aws ssm get-command-invocation --command-id "$COMMAND_ID" --instance-id "$INSTANCE_ID"
+            exit 1
+          fi
+
+      - name: Smoke test - backend health
+        run: |
+          URL="${{ needs.terraform.outputs.backend_api_base_url }}/health"
+          for i in $(seq 1 12); do
+            if curl -fsS "$URL"; then exit 0; fi
+            sleep 10
+          done
+          echo "Backend health check failed" && exit 1
+
+  deploy-frontend:
+    needs: [detect-changes, terraform]
+    if: needs.detect-changes.outputs.frontend == 'true' || needs.detect-changes.outputs.infra == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_GITHUB_ACTIONS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Write frontend production env
+        working-directory: frontend
+        run: |
+          cat > .env.production <<EOF
+          VITE_API_BASE_URL=${{ needs.terraform.outputs.backend_api_base_url }}
+          VITE_COGNITO_REGION=${{ vars.AWS_REGION }}
+          VITE_COGNITO_USER_POOL_ID=${{ needs.terraform.outputs.cognito_user_pool_id }}
+          VITE_COGNITO_APP_CLIENT_ID=${{ needs.terraform.outputs.cognito_app_client_id }}
+          EOF
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Build frontend
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+
+      - name: Sync frontend to S3
+        run: aws s3 sync frontend/dist "s3://${{ needs.terraform.outputs.static_site_bucket_name }}" --delete
+
+      - name: Invalidate CloudFront
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id "${{ needs.terraform.outputs.cloudfront_distribution_id }}" \
+            --paths "/*"
+
+      - name: Smoke test - frontend is reachable
+        run: curl -fsS "${{ needs.terraform.outputs.frontend_base_url }}" > /dev/null

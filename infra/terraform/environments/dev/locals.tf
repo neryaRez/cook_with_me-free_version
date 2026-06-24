@@ -3,11 +3,13 @@ locals {
 
   backend_repository_name = "backend"
 
+  # route53_dns_role_arn is only required for route53-cross-account mode.
+  # route53-local mode (hosted zone in this same account) leaves it empty and
+  # is still a valid custom-domain configuration - see providers.tf.
   custom_domain_enabled = (
     var.enable_custom_domain &&
     trimspace(var.root_domain) != "" &&
-    trimspace(var.frontend_subdomain) != "" &&
-    trimspace(var.route53_dns_role_arn) != ""
+    trimspace(var.frontend_subdomain) != ""
   )
 
   frontend_subdomain_effective = trimspace(var.frontend_subdomain) != "" ? trimspace(var.frontend_subdomain) : "cook"

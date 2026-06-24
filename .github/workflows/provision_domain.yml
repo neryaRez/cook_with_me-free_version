@@ -1,0 +1,125 @@
+name: provision_domain
+
+# Optional domain/DNS provisioning - the app already works on the default
+# CloudFront domain without this ever running. This is the ONLY workflow
+# that passes enable_custom_domain=true to Terraform; build_start.yml and
+# update.yml only ever preserve whatever is already in state, so once this
+# has run once, later deploys won't tear the domain back down.
+#
+# If ENABLE_CUSTOM_DOMAIN is not "true" (cloudfront-only, the default), this
+# exits cleanly - nothing to provision, not an error.
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: cook-with-me-dev-environment
+  cancel-in-progress: false
+
+jobs:
+  provision_domain:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify bootstrap variables are configured
+        run: |
+          missing=0
+          for name in AWS_REGION AWS_GITHUB_ACTIONS_ROLE_ARN TF_STATE_BUCKET TF_DEV_STATE_KEY; do
+            value="${!name}"
+            if [ -z "$value" ]; then
+              echo "::error::Required repository variable $name is not set. Run ./scripts/bootstrap-aws.sh first."
+              missing=1
+            fi
+          done
+          [ "$missing" -eq 0 ]
+        env:
+          AWS_REGION: ${{ vars.AWS_REGION }}
+          AWS_GITHUB_ACTIONS_ROLE_ARN: ${{ vars.AWS_GITHUB_ACTIONS_ROLE_ARN }}
+          TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+          TF_DEV_STATE_KEY: ${{ vars.TF_DEV_STATE_KEY }}
+
+      - name: Check whether a custom domain is configured
+        run: |
+          if [ "${{ vars.ENABLE_CUSTOM_DOMAIN }}" != "true" ]; then
+            echo "ENABLE_CUSTOM_DOMAIN is not 'true' (DNS_MODE=${{ vars.DNS_MODE }})."
+            echo "Nothing to provision - the app already works via the default CloudFront domain."
+            echo "Re-run scripts/bootstrap-aws.sh with ROOT_DOMAIN set if you want a custom domain."
+          fi
+
+      - name: Configure AWS credentials (OIDC)
+        if: vars.ENABLE_CUSTOM_DOMAIN == 'true'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_GITHUB_ACTIONS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Setup Terraform
+        if: vars.ENABLE_CUSTOM_DOMAIN == 'true'
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.15.5"
+
+      - name: Generate backend.tf
+        if: vars.ENABLE_CUSTOM_DOMAIN == 'true'
+        working-directory: infra/terraform/environments/dev
+        run: |
+          cat > backend.tf <<EOF
+          terraform {
+            backend "s3" {
+              bucket       = "${{ vars.TF_STATE_BUCKET }}"
+              key          = "${{ vars.TF_DEV_STATE_KEY }}"
+              region       = "${{ vars.AWS_REGION }}"
+              encrypt      = true
+              use_lockfile = true
+            }
+          }
+          EOF
+
+      - name: Generate terraform.tfvars
+        if: vars.ENABLE_CUSTOM_DOMAIN == 'true'
+        working-directory: infra/terraform/environments/dev
+        run: |
+          cat > terraform.tfvars <<EOF
+          project_name         = "${{ vars.PROJECT_NAME }}"
+          environment          = "${{ vars.ENVIRONMENT }}"
+          aws_region           = "${{ vars.AWS_REGION }}"
+          enable_custom_domain = ${{ vars.ENABLE_CUSTOM_DOMAIN }}
+          root_domain          = "${{ vars.ROOT_DOMAIN }}"
+          frontend_subdomain   = "${{ vars.FRONTEND_SUBDOMAIN }}"
+          route53_dns_role_arn = "${{ vars.ROUTE53_DNS_ROLE_ARN }}"
+          app_secret_name      = "${{ vars.SECRET_NAME }}"
+          EOF
+
+      - name: Terraform init
+        if: vars.ENABLE_CUSTOM_DOMAIN == 'true'
+        working-directory: infra/terraform/environments/dev
+        run: terraform init -input=false
+
+      - name: Terraform validate
+        if: vars.ENABLE_CUSTOM_DOMAIN == 'true'
+        working-directory: infra/terraform/environments/dev
+        run: terraform validate
+
+      - name: Terraform plan
+        if: vars.ENABLE_CUSTOM_DOMAIN == 'true'
+        working-directory: infra/terraform/environments/dev
+        run: terraform plan -input=false -out=tfplan
+
+      - name: Terraform apply
+        if: vars.ENABLE_CUSTOM_DOMAIN == 'true'
+        working-directory: infra/terraform/environments/dev
+        run: terraform apply -input=false -auto-approve tfplan
+
+      - name: Show custom domain
+        if: vars.ENABLE_CUSTOM_DOMAIN == 'true'
+        working-directory: infra/terraform/environments/dev
+        run: |
+          echo "Custom frontend domain: $(terraform output -raw custom_frontend_domain)"
+          echo "Frontend base URL:      $(terraform output -raw frontend_base_url)"
+          echo "DNS validation can take a few minutes to propagate."

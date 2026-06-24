@@ -12,5 +12,6 @@ def health():
             "status": "ok",
             "db_configured": config.USE_DB,
             "openai_configured": config.USE_OPENAI,
+            "auth_configured": config.USE_AUTH,
         }
     )

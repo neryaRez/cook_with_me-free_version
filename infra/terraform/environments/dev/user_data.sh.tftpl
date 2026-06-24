@@ -3,6 +3,7 @@ set -euo pipefail
 
 APP_DIR="/opt/cook-with-me"
 RUNTIME_ENV="$APP_DIR/runtime.env"
+COMPOSE_ENV="$APP_DIR/.env"
 COMPOSE_FILE="$APP_DIR/docker-compose.yml"
 
 mkdir -p "$APP_DIR"
@@ -21,6 +22,8 @@ if ! docker compose version >/dev/null 2>&1; then
   chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
 fi
 
+# Secrets live only in Secrets Manager and are written straight to a 600
+# file the container reads via env_file - never echoed, never logged.
 aws secretsmanager get-secret-value \
   --region "${aws_region}" \
   --secret-id "${app_secret_name}" \
@@ -31,15 +34,23 @@ aws secretsmanager get-secret-value \
   echo "DATABASE_URL=$(jq -r '.DATABASE_URL // ""' /tmp/cook-secret.json)"
   echo "OPENAI_API_KEY=$(jq -r '.OPENAI_API_KEY // ""' /tmp/cook-secret.json)"
   echo "CORS_ALLOWED_ORIGINS=${cors_allowed_origins}"
+  echo "AWS_REGION=${aws_region}"
+  echo "COGNITO_USER_POOL_ID=${cognito_user_pool_id}"
+  echo "COGNITO_APP_CLIENT_ID=${cognito_app_client_id}"
 } > "$RUNTIME_ENV"
 
 chmod 600 "$RUNTIME_ENV"
 rm -f /tmp/cook-secret.json
 
-cat > "$COMPOSE_FILE" <<COMPOSE
+# Compose-time variable, not a container runtime variable - env_file does
+# not feed Compose's own variable substitution, so it gets its own file.
+echo "BACKEND_IMAGE=${backend_image}" > "$COMPOSE_ENV"
+chmod 644 "$COMPOSE_ENV"
+
+cat > "$COMPOSE_FILE" <<'COMPOSE'
 services:
   backend:
-    image: ${backend_image}
+    image: $${BACKEND_IMAGE}
     container_name: cook-with-me-backend
     restart: unless-stopped
     ports:
@@ -60,7 +71,6 @@ COMPOSE
 aws ecr get-login-password --region "${aws_region}" \
   | docker login --username AWS --password-stdin "${ecr_registry}"
 
-# First boot may happen before the first image is pushed.
-# The GitHub Action will push the image and trigger the same compose pull/up through SSM.
-docker compose -f "$COMPOSE_FILE" pull || true
-docker compose -f "$COMPOSE_FILE" up -d || true
+cd "$APP_DIR"
+docker compose pull || true
+docker compose up -d || true

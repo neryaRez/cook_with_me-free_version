@@ -1,7 +1,22 @@
-from sqlalchemy import Column, Float, Integer, String, Text
+from sqlalchemy import Column, DateTime, Float, Integer, String, Text
+from sqlalchemy.sql import func
 from sqlalchemy.types import JSON
 
 from .db import Base
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True, index=True)
+    cognito_sub = Column(String(64), unique=True, nullable=False, index=True)
+    email = Column(String(255), nullable=False)
+    display_name = Column(String(255), nullable=True)
+    username = Column(String(100), nullable=True)
+    bio = Column(Text, nullable=True)
+    avatar_url = Column(Text, nullable=True)
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
 
 
 class Recipe(Base):
@@ -26,3 +41,8 @@ class Recipe(Base):
     ingredients = Column(JSON, nullable=False, default=list)
     steps = Column(JSON, nullable=False, default=list)
     comments = Column(JSON, nullable=False, default=list)
+
+    owner_sub = Column(String(64), nullable=True, index=True)
+    owner_email = Column(String(255), nullable=True)
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)

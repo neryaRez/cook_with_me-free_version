@@ -1,8 +1,9 @@
 import { mockRecipes } from '../data/mockRecipes'
 import { chatKeywordResponses, defaultChatReply } from '../data/mockChatResponses'
+import { getIdToken } from './tokenStore.js'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? ''
-const USE_REAL_API =
+export const USE_REAL_API =
   import.meta.env.VITE_USE_REAL_API === 'true' || Boolean(API_BASE_URL)
 
 const MOCK_DELAY_MS = 500
@@ -16,9 +17,13 @@ const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 const generateId = () => `id-${Date.now()}-${Math.floor(Math.random() * 10000)}`
 
 async function request(path, options = {}) {
+  const idToken = getIdToken()
+  const headers = { 'Content-Type': 'application/json', ...options.headers }
+  if (idToken) headers.Authorization = `Bearer ${idToken}`
+
   const response = await fetch(`${API_BASE_URL}${path}`, {
-    headers: { 'Content-Type': 'application/json' },
     ...options,
+    headers,
   })
 
   let json = null
@@ -134,4 +139,22 @@ export async function askRoboChef(data) {
     id: generateId(),
     reply: match ? match.reply : defaultChatReply,
   }
+}
+
+export async function getMyRecipes() {
+  if (!USE_REAL_API) {
+    await delay(MOCK_DELAY_MS)
+    return []
+  }
+  return request('/api/recipes/mine')
+}
+
+export async function getMe() {
+  if (!USE_REAL_API) return null
+  return request('/api/me')
+}
+
+export async function updateMe(payload) {
+  if (!USE_REAL_API) return payload
+  return request('/api/me', { method: 'PUT', body: JSON.stringify(payload) })
 }

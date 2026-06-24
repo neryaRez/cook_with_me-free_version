@@ -55,6 +55,7 @@ export default function ChatInterface({ compact = false }) {
 
   function handleSubmit(event) {
     event.preventDefault()
+    if (isThinking) return
     sendMessage(input)
   }
 

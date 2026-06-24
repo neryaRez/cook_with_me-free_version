@@ -67,6 +67,7 @@ export default function CreateRecipePage() {
 
   async function handleSubmit(event) {
     event.preventDefault()
+    if (isSubmitting) return
     setError(null)
 
     if (!form.title.trim() || !form.description.trim()) {

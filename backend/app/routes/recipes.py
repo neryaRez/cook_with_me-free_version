@@ -9,9 +9,10 @@ db.get_session() and real models instead of _RECIPES.
 
 from datetime import date
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, g, jsonify, request
 
 from .. import config
+from ..auth import require_auth
 from ..db import get_session
 from ..models import Recipe
 
@@ -203,6 +204,8 @@ def _serialize_recipe(recipe):
         "ingredients": recipe.ingredients or [],
         "steps": recipe.steps or [],
         "comments": recipe.comments or [],
+        "ownerSub": recipe.owner_sub,
+        "ownerEmail": recipe.owner_email,
     }
 
 
@@ -227,6 +230,28 @@ def list_recipes():
     return jsonify({"data": _RECIPES})
 
 
+@recipes_bp.route("/mine", methods=["GET"])
+@require_auth
+def list_my_recipes():
+    owner_sub = g.current_user["sub"]
+
+    if config.USE_DB:
+        session = get_session()
+        try:
+            recipes = (
+                session.query(Recipe)
+                .filter(Recipe.owner_sub == owner_sub)
+                .order_by(Recipe.id.desc())
+                .all()
+            )
+            return jsonify({"data": [_serialize_recipe(recipe) for recipe in recipes]})
+        finally:
+            session.close()
+
+    mine = [recipe for recipe in _RECIPES if recipe.get("ownerSub") == owner_sub]
+    return jsonify({"data": mine})
+
+
 @recipes_bp.route("/<recipe_id>", methods=["GET"])
 def get_recipe(recipe_id):
     if config.USE_DB:
@@ -246,17 +271,23 @@ def get_recipe(recipe_id):
 
 
 @recipes_bp.route("", methods=["POST"])
+@require_auth
 def create_recipe():
     payload = request.get_json(silent=True) or {}
 
     if not payload.get("title") or not payload.get("description"):
         return jsonify({"error": "title and description are required"}), 400
 
+    # Ownership is derived exclusively from the verified JWT. Any
+    # user_id/email/author the client puts in the body is ignored for
+    # ownership purposes.
+    owner_sub = g.current_user["sub"]
+    owner_email = g.current_user["email"] or ""
+    author_name = owner_email.split("@")[0] if owner_email else "Guest Chef"
+
     if config.USE_DB:
         session = get_session()
         try:
-            author = payload.get("author") or {}
-
             recipe = Recipe(
                 title=payload["title"],
                 description=payload["description"],
@@ -268,12 +299,14 @@ def create_recipe():
                 cook_time=payload.get("cookTime", 0),
                 servings=payload.get("servings", 1),
                 rating=0,
-                author_name=author.get("name", "Guest Chef"),
-                author_avatar=author.get("avatar", "https://i.pravatar.cc/100?img=1"),
+                author_name=author_name,
+                author_avatar="https://i.pravatar.cc/100?img=1",
                 tags=payload.get("tags", []),
                 ingredients=payload.get("ingredients", []),
                 steps=payload.get("steps", []),
                 comments=[],
+                owner_sub=owner_sub,
+                owner_email=owner_email,
             )
 
             session.add(recipe)
@@ -299,11 +332,13 @@ def create_recipe():
         "cookTime": payload.get("cookTime", 0),
         "servings": payload.get("servings", 1),
         "rating": 0,
-        "author": {"name": "Guest Chef", "avatar": "https://i.pravatar.cc/100?img=1"},
+        "author": {"name": author_name, "avatar": "https://i.pravatar.cc/100?img=1"},
         "tags": payload.get("tags", []),
         "ingredients": payload.get("ingredients", []),
         "steps": payload.get("steps", []),
         "comments": [],
+        "ownerSub": owner_sub,
+        "ownerEmail": owner_email,
     }
 
     _RECIPES.append(recipe)
@@ -356,13 +391,18 @@ def add_comment(recipe_id):
     return jsonify({"data": comment}), 201
 
 @recipes_bp.route("/<recipe_id>", methods=["DELETE"])
+@require_auth
 def delete_recipe(recipe_id):
+    owner_sub = g.current_user["sub"]
+
     if config.USE_DB:
         session = get_session()
         try:
             recipe = session.get(Recipe, int(recipe_id))
             if recipe is None:
                 return jsonify({"error": "Recipe not found"}), 404
+            if not recipe.owner_sub or recipe.owner_sub != owner_sub:
+                return jsonify({"error": "You do not own this recipe"}), 403
 
             session.delete(recipe)
             session.commit()
@@ -376,6 +416,8 @@ def delete_recipe(recipe_id):
     recipe = _find_mock_recipe(recipe_id)
     if recipe is None:
         return jsonify({"error": "Recipe not found"}), 404
+    if not recipe.get("ownerSub") or recipe.get("ownerSub") != owner_sub:
+        return jsonify({"error": "You do not own this recipe"}), 403
 
     _RECIPES.remove(recipe)
     return jsonify({"data": {"deleted": True, "id": str(recipe_id)}})

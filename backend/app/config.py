@@ -21,3 +21,16 @@ CORS_ALLOWED_ORIGINS = [
     for origin in os.environ.get("CORS_ALLOWED_ORIGINS", "").split(",")
     if origin.strip()
 ]
+
+AWS_REGION = os.environ.get("AWS_REGION", "us-east-1")
+COGNITO_USER_POOL_ID = os.environ.get("COGNITO_USER_POOL_ID")
+COGNITO_APP_CLIENT_ID = os.environ.get("COGNITO_APP_CLIENT_ID")
+
+USE_AUTH = bool(COGNITO_USER_POOL_ID and COGNITO_APP_CLIENT_ID)
+
+COGNITO_ISSUER = (
+    f"https://cognito-idp.{AWS_REGION}.amazonaws.com/{COGNITO_USER_POOL_ID}"
+    if USE_AUTH
+    else None
+)
+COGNITO_JWKS_URL = f"{COGNITO_ISSUER}/.well-known/jwks.json" if USE_AUTH else None
