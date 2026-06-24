@@ -14,3 +14,10 @@ FLASK_ENV = os.environ.get("FLASK_ENV", "production")
 # Convenience flags used to switch between mock data and real integrations.
 USE_DB = bool(DATABASE_URL)
 USE_OPENAI = bool(OPENAI_API_KEY)
+
+
+CORS_ALLOWED_ORIGINS = [
+    origin.strip()
+    for origin in os.environ.get("CORS_ALLOWED_ORIGINS", "").split(",")
+    if origin.strip()
+]

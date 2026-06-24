@@ -10,7 +10,10 @@ from .routes.recipes import recipes_bp
 
 def create_app():
     app = Flask(__name__)
-    CORS(app)
+    if config.CORS_ALLOWED_ORIGINS:
+        CORS(app, origins=config.CORS_ALLOWED_ORIGINS)
+    else:
+        CORS(app)
 
     app.register_blueprint(health_bp)
     app.register_blueprint(recipes_bp)
