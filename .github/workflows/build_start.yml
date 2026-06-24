@@ -60,6 +60,7 @@ jobs:
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: "1.15.5"
+          terraform_wrapper: false
 
       - name: Generate backend.tf
         working-directory: infra/terraform/environments/dev
@@ -85,8 +86,12 @@ jobs:
         id: domain_state
         working-directory: infra/terraform/environments/dev
         run: |
-          CURRENT=$(terraform output -raw custom_domain_enabled 2>/dev/null || echo "false")
+          CURRENT="$(terraform output -raw custom_domain_enabled 2>/dev/null || true)"
+          if [ "$CURRENT" != "true" ]; then
+            CURRENT="false"
+          fi
           echo "enabled=$CURRENT" >> "$GITHUB_OUTPUT"
+          echo "Custom domain currently enabled in state: $CURRENT"
 
       - name: Generate terraform.tfvars
         working-directory: infra/terraform/environments/dev
