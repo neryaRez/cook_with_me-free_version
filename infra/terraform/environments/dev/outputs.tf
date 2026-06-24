@@ -82,3 +82,23 @@ output "custom_frontend_domain" {
   description = "Custom frontend domain."
   value       = local.custom_frontend_domain
 }
+
+output "backend_instance_id" {
+  description = "Backend EC2 instance ID."
+  value       = module.backend_ec2.instance_id
+}
+
+output "backend_public_ip" {
+  description = "Backend EC2 public IP."
+  value       = module.backend_ec2.public_ip
+}
+
+output "backend_public_dns" {
+  description = "Backend EC2 public DNS."
+  value       = module.backend_ec2.public_dns
+}
+
+output "backend_image" {
+  description = "Backend Docker image expected by EC2."
+  value       = local.backend_image
+}

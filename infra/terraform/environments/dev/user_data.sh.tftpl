@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+APP_DIR="/opt/cook-with-me"
+RUNTIME_ENV="$APP_DIR/runtime.env"
+COMPOSE_FILE="$APP_DIR/docker-compose.yml"
+
+mkdir -p "$APP_DIR"
+chmod 750 "$APP_DIR"
+
+dnf update -y
+dnf install -y docker jq awscli curl
+
+systemctl enable docker
+systemctl start docker
+
+if ! docker compose version >/dev/null 2>&1; then
+  mkdir -p /usr/local/lib/docker/cli-plugins
+  curl -fsSL "https://github.com/docker/compose/releases/download/v2.29.7/docker-compose-linux-x86_64" \
+    -o /usr/local/lib/docker/cli-plugins/docker-compose
+  chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+fi
+
+aws secretsmanager get-secret-value \
+  --region "${aws_region}" \
+  --secret-id "${app_secret_name}" \
+  --query SecretString \
+  --output text > /tmp/cook-secret.json
+
+{
+  echo "DATABASE_URL=$(jq -r '.DATABASE_URL // ""' /tmp/cook-secret.json)"
+  echo "OPENAI_API_KEY=$(jq -r '.OPENAI_API_KEY // ""' /tmp/cook-secret.json)"
+  echo "CORS_ALLOWED_ORIGINS=${cors_allowed_origins}"
+} > "$RUNTIME_ENV"
+
+chmod 600 "$RUNTIME_ENV"
+rm -f /tmp/cook-secret.json
+
+cat > "$COMPOSE_FILE" <<COMPOSE
+services:
+  backend:
+    image: ${backend_image}
+    container_name: cook-with-me-backend
+    restart: unless-stopped
+    ports:
+      - "80:8080"
+    env_file:
+      - /opt/cook-with-me/runtime.env
+    environment:
+      PORT: "8080"
+      FLASK_ENV: "production"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+COMPOSE
+
+aws ecr get-login-password --region "${aws_region}" \
+  | docker login --username AWS --password-stdin "${ecr_registry}"
+
+# First boot may happen before the first image is pushed.
+# The GitHub Action will push the image and trigger the same compose pull/up through SSM.
+docker compose -f "$COMPOSE_FILE" pull || true
+docker compose -f "$COMPOSE_FILE" up -d || true

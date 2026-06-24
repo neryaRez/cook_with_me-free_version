@@ -36,7 +36,7 @@ data "aws_iam_policy_document" "ec2_runtime" {
   }
 
   statement {
-    sid    = "PullFromECR"
+    sid    = "GetECRLoginToken"
     effect = "Allow"
 
     actions = [
@@ -47,7 +47,7 @@ data "aws_iam_policy_document" "ec2_runtime" {
   }
 
   statement {
-    sid    = "ReadECRImages"
+    sid    = "ReadBackendECRRepository"
     effect = "Allow"
 
     actions = [
@@ -58,7 +58,7 @@ data "aws_iam_policy_document" "ec2_runtime" {
       "ecr:DescribeRepositories"
     ]
 
-    resources = ["*"]
+    resources = module.ecr.repository_arns
   }
 
   statement {
