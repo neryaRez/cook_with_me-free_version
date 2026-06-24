@@ -96,3 +96,5 @@ infra/terraform/bootstrap/terraform.tfvars.json
 output.txt
 inspector-report.txt
 remove_identifiers.py
+summary.txt
+claude-last-plan.md
