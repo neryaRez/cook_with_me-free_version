@@ -7,6 +7,10 @@ AWS_REGION="${AWS_REGION:-${AWS_DEFAULT_REGION:-us-east-1}}"
 GITHUB_BRANCH_DEFAULT="${GITHUB_BRANCH:-main}"
 FRONTEND_SUBDOMAIN_DEFAULT="${FRONTEND_SUBDOMAIN:-cook}"
 
+ROOT_DOMAIN="${ROOT_DOMAIN:-}"
+FRONTEND_SUBDOMAIN="${FRONTEND_SUBDOMAIN:-}"
+ROUTE53_DNS_ROLE_ARN="${ROUTE53_DNS_ROLE_ARN:-}"
+
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BOOTSTRAP_DIR="$ROOT_DIR/infra/terraform/bootstrap"
 
@@ -130,26 +134,109 @@ detect_github_oidc_provider_arn() {
     | head -n 1 || true
 }
 
-detect_root_domain_from_route53() {
-  aws route53 list-hosted-zones \
-    --query "HostedZones[?Config.PrivateZone==\`false\`].Name" \
-    --output text 2>/dev/null \
-    | tr '\t' '\n' \
-    | sed 's/\.$//' \
-    | grep -E '^[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$' \
-    | sort \
-    | head -n 1 || true
+get_github_variable_if_exists() {
+  local name="$1"
+
+  if ! command_exists gh; then
+    echo ""
+    return 0
+  fi
+
+  if ! gh auth status >/dev/null 2>&1; then
+    echo ""
+    return 0
+  fi
+
+  gh variable get "$name" \
+    --repo "$GITHUB_OWNER/$GITHUB_REPO" 2>/dev/null || true
 }
 
 put_github_variable() {
   local name="$1"
-  local value="$2"
+  local value="${2:-}"
+
+  if [[ -z "$value" ]]; then
+    echo "ℹ️ GitHub variable skipped because value is empty: $name"
+    return 0
+  fi
 
   gh variable set "$name" \
     --repo "$GITHUB_OWNER/$GITHUB_REPO" \
     --body "$value" >/dev/null
 
   echo "✅ GitHub variable set: $name"
+}
+
+detect_local_route53_hosted_zone() {
+  local wanted_domain="${1:-}"
+
+  aws route53 list-hosted-zones \
+    --output json 2>/dev/null \
+    | jq -r --arg wanted "$wanted_domain" '
+        .HostedZones[]
+        | select(.Config.PrivateZone == false)
+        | {
+            name: (.Name | rtrimstr(".")),
+            id: (.Id | split("/")[-1])
+          }
+        | select(($wanted == "") or (.name == $wanted))
+        | [.name, .id]
+        | @tsv
+      ' \
+    | sort \
+    | head -n 1 || true
+}
+
+resolve_dns_strategy() {
+  DNS_MODE="cloudfront-only"
+  ENABLE_CUSTOM_DOMAIN="false"
+  DNS_HOSTED_ZONE_ID=""
+  ROOT_DOMAIN_DETECTED=""
+  FRONTEND_BASE_URL=""
+
+  echo "==> Resolving DNS strategy..."
+
+  local local_zone
+  local_zone="$(detect_local_route53_hosted_zone "$ROOT_DOMAIN")"
+
+  if [[ -n "$local_zone" ]]; then
+    ROOT_DOMAIN_DETECTED="$(echo "$local_zone" | awk '{print $1}')"
+    DNS_HOSTED_ZONE_ID="$(echo "$local_zone" | awk '{print $2}')"
+    FRONTEND_SUBDOMAIN="${FRONTEND_SUBDOMAIN:-$FRONTEND_SUBDOMAIN_DEFAULT}"
+
+    DNS_MODE="route53-local"
+    ENABLE_CUSTOM_DOMAIN="true"
+    FRONTEND_BASE_URL="https://${FRONTEND_SUBDOMAIN}.${ROOT_DOMAIN_DETECTED}"
+
+    echo "✅ Local Route53 hosted zone found: $ROOT_DOMAIN_DETECTED"
+    return 0
+  fi
+
+  if [[ -n "$ROUTE53_DNS_ROLE_ARN" && -n "$ROOT_DOMAIN" ]]; then
+    ROOT_DOMAIN_DETECTED="$ROOT_DOMAIN"
+    FRONTEND_SUBDOMAIN="${FRONTEND_SUBDOMAIN:-$FRONTEND_SUBDOMAIN_DEFAULT}"
+
+    DNS_MODE="route53-cross-account"
+    ENABLE_CUSTOM_DOMAIN="true"
+    FRONTEND_BASE_URL="https://${FRONTEND_SUBDOMAIN}.${ROOT_DOMAIN_DETECTED}"
+
+    echo "✅ Cross-account DNS configuration detected."
+    echo "ℹ️ provision_domain will validate assume-role access and manage DNS."
+    return 0
+  fi
+
+  DNS_MODE="cloudfront-only"
+  ENABLE_CUSTOM_DOMAIN="false"
+  ROOT_DOMAIN_DETECTED=""
+  DNS_HOSTED_ZONE_ID=""
+  FRONTEND_SUBDOMAIN=""
+  FRONTEND_BASE_URL=""
+
+  if [[ -n "$ROOT_DOMAIN" && -z "$ROUTE53_DNS_ROLE_ARN" ]]; then
+    echo "⚠️ ROOT_DOMAIN was provided, but no manageable Route53 hosted zone or cross-account DNS role was found."
+  fi
+
+  echo "ℹ️ Custom domain disabled. App will use CloudFront default domain."
 }
 
 runtime_secret_exists() {
@@ -174,6 +261,7 @@ ensure_runtime_secret() {
 
   read -r -p "DATABASE_URL: " DATABASE_URL_VALUE
   DATABASE_URL_VALUE="$(normalize_database_url "$DATABASE_URL_VALUE")"
+
   read -r -s -p "OPENAI_API_KEY: " OPENAI_API_KEY_VALUE
   echo
 
@@ -273,37 +361,33 @@ if ! gh auth status >/dev/null 2>&1; then
   gh auth login
 fi
 
-echo "==> Detecting Route 53 public hosted zone..."
-ROOT_DOMAIN="$(detect_root_domain_from_route53 || true)"
-
-if [[ -n "$ROOT_DOMAIN" ]]; then
-  ENABLE_CUSTOM_DOMAIN="true"
-  FRONTEND_SUBDOMAIN="$FRONTEND_SUBDOMAIN_DEFAULT"
-  FRONTEND_BASE_URL="https://${FRONTEND_SUBDOMAIN}.${ROOT_DOMAIN}"
-
-  echo "✅ Public Route 53 hosted zone detected: $ROOT_DOMAIN"
-  echo "✅ Custom domain will be enabled: $FRONTEND_BASE_URL"
-else
-  ENABLE_CUSTOM_DOMAIN="false"
-  FRONTEND_SUBDOMAIN=""
-  FRONTEND_BASE_URL=""
-
-  echo "ℹ️ No public Route 53 hosted zone detected."
-  echo "ℹ️ App will be deployed with the default CloudFront domain."
+if [[ -z "$ROOT_DOMAIN" ]]; then
+  ROOT_DOMAIN="$(get_github_variable_if_exists ROOT_DOMAIN)"
 fi
+
+if [[ -z "$FRONTEND_SUBDOMAIN" ]]; then
+  FRONTEND_SUBDOMAIN="$(get_github_variable_if_exists FRONTEND_SUBDOMAIN)"
+fi
+
+if [[ -z "$ROUTE53_DNS_ROLE_ARN" ]]; then
+  ROUTE53_DNS_ROLE_ARN="$(get_github_variable_if_exists ROUTE53_DNS_ROLE_ARN)"
+fi
+
+resolve_dns_strategy
 
 echo
 echo "==> Detecting GitHub Actions OIDC provider..."
 EXISTING_GITHUB_OIDC_PROVIDER_ARN="$(detect_github_oidc_provider_arn || true)"
 
+CREATE_GITHUB_OIDC_PROVIDER="true"
+
 if [[ -n "$EXISTING_GITHUB_OIDC_PROVIDER_ARN" ]]; then
-  CREATE_GITHUB_OIDC_PROVIDER="false"
-  echo "✅ Existing GitHub OIDC provider found: $EXISTING_GITHUB_OIDC_PROVIDER_ARN"
+  echo "✅ Existing GitHub OIDC provider found and will remain managed by Terraform: $EXISTING_GITHUB_OIDC_PROVIDER_ARN"
 else
-  CREATE_GITHUB_OIDC_PROVIDER="true"
-  EXISTING_GITHUB_OIDC_PROVIDER_ARN=""
   echo "ℹ️ No GitHub OIDC provider found. Terraform bootstrap will create one."
 fi
+
+EXISTING_GITHUB_OIDC_PROVIDER_ARN=""
 
 echo
 echo "============================================================"
@@ -319,9 +403,15 @@ echo "State bucket:         $TF_STATE_BUCKET"
 echo "Dev state key:        $TF_DEV_STATE_KEY"
 echo "Secret name:          $SECRET_NAME"
 echo "GitHub role name:     $GITHUB_ACTIONS_ROLE_NAME"
+echo "DNS mode:             $DNS_MODE"
 echo "Custom domain:        $ENABLE_CUSTOM_DOMAIN"
-echo "Root domain:          ${ROOT_DOMAIN:-none}"
+echo "Root domain:          ${ROOT_DOMAIN_DETECTED:-none}"
+echo "Hosted zone id:       ${DNS_HOSTED_ZONE_ID:-none}"
 echo "Frontend subdomain:   ${FRONTEND_SUBDOMAIN:-none}"
+echo "Route53 DNS role:     ${ROUTE53_DNS_ROLE_ARN:-none}"
+if [[ "$ENABLE_CUSTOM_DOMAIN" == "true" ]]; then
+  echo "Frontend URL:         $FRONTEND_BASE_URL"
+fi
 echo "============================================================"
 echo
 
@@ -365,8 +455,11 @@ put_github_variable PROJECT_NAME "$PROJECT_NAME"
 put_github_variable ENVIRONMENT "$ENVIRONMENT"
 put_github_variable SECRET_NAME "$SECRET_NAME"
 put_github_variable ENABLE_CUSTOM_DOMAIN "$ENABLE_CUSTOM_DOMAIN"
-put_github_variable ROOT_DOMAIN "$ROOT_DOMAIN"
+put_github_variable ROOT_DOMAIN "$ROOT_DOMAIN_DETECTED"
 put_github_variable FRONTEND_SUBDOMAIN "$FRONTEND_SUBDOMAIN"
+put_github_variable DNS_MODE "$DNS_MODE"
+put_github_variable DNS_HOSTED_ZONE_ID "$DNS_HOSTED_ZONE_ID"
+put_github_variable ROUTE53_DNS_ROLE_ARN "$ROUTE53_DNS_ROLE_ARN"
 
 echo
 echo "============================================================"
@@ -378,6 +471,9 @@ echo
 echo "GitHub OIDC provider:"
 echo "$GITHUB_OIDC_PROVIDER_ARN"
 echo
+echo "DNS mode:"
+echo "$DNS_MODE"
+echo
 if [[ "$ENABLE_CUSTOM_DOMAIN" == "true" ]]; then
   echo "Custom domain target:"
   echo "$FRONTEND_BASE_URL"
@@ -388,4 +484,5 @@ echo
 echo "Next:"
 echo "  Build infra/terraform/environments/dev"
 echo "  Use S3 backend with use_lockfile=true"
+echo "  provision_domain will perform final DNS validation and provisioning"
 echo "============================================================"
