@@ -1,9 +1,9 @@
 data "aws_caller_identity" "current" {}
 
 locals {
-  github_oidc_provider_arn = var.create_github_oidc_provider ? aws_iam_openid_connect_provider.github_actions[0].arn : var.existing_github_oidc_provider_arn
 
-  repo_full_name = "${var.github_owner}/${var.github_repo}"
+  github_oidc_provider_arn = aws_iam_openid_connect_provider.github_actions.arn
+  repo_full_name           = "${var.github_owner}/${var.github_repo}"
 
   allowed_subjects = [
     "repo:${local.repo_full_name}:ref:refs/heads/${var.github_branch}",
@@ -56,11 +56,13 @@ resource "aws_s3_bucket_ownership_controls" "terraform_state" {
 }
 
 resource "aws_iam_openid_connect_provider" "github_actions" {
-  count = var.create_github_oidc_provider ? 1 : 0
-
   url             = "https://token.actions.githubusercontent.com"
   client_id_list  = ["sts.amazonaws.com"]
   thumbprint_list = ["6938fd4d98bab03faadb97b34396831e3780aea1"]
+
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 data "aws_iam_policy_document" "github_actions_assume_role" {
