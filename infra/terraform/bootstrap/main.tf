@@ -126,6 +126,50 @@ data "aws_iam_policy_document" "github_actions_deploy" {
 
     resources = ["*"]
   }
+
+  statement {
+    sid    = "ManageCognitoAuth"
+    effect = "Allow"
+
+    actions = [
+      "cognito-idp:CreateUserPool",
+      "cognito-idp:DeleteUserPool",
+      "cognito-idp:DescribeUserPool",
+      "cognito-idp:UpdateUserPool",
+      "cognito-idp:ListUserPools",
+      "cognito-idp:TagResource",
+      "cognito-idp:UntagResource",
+      "cognito-idp:ListTagsForResource",
+      "cognito-idp:CreateUserPoolDomain",
+      "cognito-idp:DeleteUserPoolDomain",
+      "cognito-idp:DescribeUserPoolDomain",
+      "cognito-idp:UpdateUserPoolDomain",
+      "cognito-idp:CreateUserPoolClient",
+      "cognito-idp:DeleteUserPoolClient",
+      "cognito-idp:DescribeUserPoolClient",
+      "cognito-idp:UpdateUserPoolClient",
+      "cognito-idp:SetUICustomization",
+      "cognito-idp:GetUICustomization"
+    ]
+
+    resources = ["*"]
+  }
+
+  statement {
+    sid    = "ManageInspector"
+    effect = "Allow"
+
+    actions = [
+      "inspector2:Enable",
+      "inspector2:Disable",
+      "inspector2:BatchGetAccountStatus",
+      "inspector2:ListAccountPermissions",
+      "inspector2:ListCoverage",
+      "inspector2:ListFindings"
+    ]
+
+    resources = ["*"]
+  }
 }
 
 resource "aws_iam_role_policy" "github_actions_deploy" {
