@@ -176,21 +176,42 @@ jobs:
           INSTANCE_ID="${{ steps.tf_outputs.outputs.backend_instance_id }}"
           ECR_REGISTRY="$(echo "${{ steps.tf_outputs.outputs.backend_ecr_repository_url }}" | cut -d/ -f1)"
 
+          SSM_SCRIPT="$(cat <<'SSM_SCRIPT'
+set -euo pipefail
+
+ECR_REGISTRY="__ECR_REGISTRY__"
+AWS_REGION="__AWS_REGION__"
+
+for i in {1..60}; do
+  if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1 && test -f /opt/cook-with-me/docker-compose.yml; then
+    break
+  fi
+
+  echo "waiting for docker and user_data ($i/60)"
+  sleep 10
+done
+
+command -v docker
+docker compose version
+test -f /opt/cook-with-me/docker-compose.yml
+
+cd /opt/cook-with-me
+
+aws ecr get-login-password --region "$AWS_REGION" \
+  | docker login --username AWS --password-stdin "$ECR_REGISTRY"
+
+docker compose pull
+docker compose up -d
+SSM_SCRIPT
+)"
+          SSM_SCRIPT="${SSM_SCRIPT//__ECR_REGISTRY__/$ECR_REGISTRY}"
+          SSM_SCRIPT="${SSM_SCRIPT//__AWS_REGION__/${{ vars.AWS_REGION }}}"
+
           COMMAND_ID=$(aws ssm send-command \
             --instance-ids "$INSTANCE_ID" \
             --document-name "AWS-RunShellScript" \
             --comment "Deploy cook-with-me backend (build_start)" \
-            --parameters commands="[
-              \"set -e\",
-              \"for i in $(seq 1 60); do command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1 && test -f /opt/cook-with-me/docker-compose.yml && break; echo waiting for docker and user_data; sleep 10; done\",
-              \"command -v docker\",
-              \"docker compose version\",
-              \"test -f /opt/cook-with-me/docker-compose.yml\",
-              \"cd /opt/cook-with-me\",
-              \"aws ecr get-login-password --region ${{ vars.AWS_REGION }} | docker login --username AWS --password-stdin $ECR_REGISTRY\",
-              \"docker compose pull\",
-              \"docker compose up -d\"
-            ]" \
+            --parameters "$(jq -n --arg script "$SSM_SCRIPT" '{commands:[$script]}')" \
             --query "Command.CommandId" --output text)
 
           aws ssm wait command-executed --command-id "$COMMAND_ID" --instance-id "$INSTANCE_ID" || true
