@@ -181,6 +181,11 @@ jobs:
             --document-name "AWS-RunShellScript" \
             --comment "Deploy cook-with-me backend (build_start)" \
             --parameters commands="[
+              \"set -e\",
+              \"for i in $(seq 1 60); do command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1 && test -f /opt/cook-with-me/docker-compose.yml && break; echo waiting for docker and user_data; sleep 10; done\",
+              \"command -v docker\",
+              \"docker compose version\",
+              \"test -f /opt/cook-with-me/docker-compose.yml\",
               \"cd /opt/cook-with-me\",
               \"aws ecr get-login-password --region ${{ vars.AWS_REGION }} | docker login --username AWS --password-stdin $ECR_REGISTRY\",
               \"docker compose pull\",
