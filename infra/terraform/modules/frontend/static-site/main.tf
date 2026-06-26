@@ -55,6 +55,22 @@ resource "aws_cloudfront_distribution" "site" {
     origin_access_control_id = aws_cloudfront_origin_access_control.site.id
   }
 
+  dynamic "origin" {
+    for_each = var.backend_origin_domain_name == null ? [] : [var.backend_origin_domain_name]
+
+    content {
+      domain_name = origin.value
+      origin_id   = "ec2-backend-origin"
+
+      custom_origin_config {
+        http_port              = 80
+        https_port             = 443
+        origin_protocol_policy = "http-only"
+        origin_ssl_protocols   = ["TLSv1.2"]
+      }
+    }
+  }
+
   default_cache_behavior {
     target_origin_id       = "s3-${aws_s3_bucket.site.id}"
     viewer_protocol_policy = "redirect-to-https"
@@ -70,6 +86,31 @@ resource "aws_cloudfront_distribution" "site" {
       cookies {
         forward = "none"
       }
+    }
+  }
+
+  dynamic "ordered_cache_behavior" {
+    for_each = var.backend_origin_domain_name == null ? [] : [
+      {
+        path_pattern = "/api/*"
+      },
+      {
+        path_pattern = "/health"
+      }
+    ]
+
+    content {
+      path_pattern           = ordered_cache_behavior.value.path_pattern
+      target_origin_id       = "ec2-backend-origin"
+      viewer_protocol_policy = "redirect-to-https"
+
+      allowed_methods = ["GET", "HEAD", "OPTIONS", "POST", "PUT", "PATCH", "DELETE"]
+      cached_methods  = ["GET", "HEAD", "OPTIONS"]
+
+      compress = true
+
+      cache_policy_id          = var.backend_api_cache_policy_id
+      origin_request_policy_id = var.backend_api_origin_request_policy_id
     }
   }
 

@@ -1,19 +1,17 @@
 locals {
   # Cognito remains the identity provider.
-  # The user experience should be implemented in React custom pages,
-  # not locked into Cognito Hosted UI styling.
-  cloudfront_frontend_base_url = "https://${module.static_site.cloudfront_domain_name}"
-
-  frontend_base_urls = compact(concat(
-    [local.cloudfront_frontend_base_url],
-    local.custom_domain_enabled ? [local.custom_frontend_base_url] : []
-  ))
+  # Do NOT reference module.static_site here.
+  # If a real domain exists, automation passes/derives it.
+  # If no domain exists, build_start later aligns Cognito to the created CloudFront default URL.
+  cognito_frontend_base_url = local.frontend_public_base_url != "" ? local.frontend_public_base_url : "http://localhost:5173"
 
   cognito_callback_urls = [
-    for url in local.frontend_base_urls : "${url}/auth/callback"
+    "${local.cognito_frontend_base_url}/auth/callback"
   ]
 
-  cognito_logout_urls = local.frontend_base_urls
+  cognito_logout_urls = [
+    local.cognito_frontend_base_url
+  ]
 }
 
 module "cognito" {
@@ -27,8 +25,6 @@ module "cognito" {
   callback_urls = local.cognito_callback_urls
   logout_urls   = local.cognito_logout_urls
 
-  # Keep Hosted UI CSS intentionally minimal.
-  # React pages should own the real visual design.
   ui_custom_css = ""
 
   tags = local.common_tags

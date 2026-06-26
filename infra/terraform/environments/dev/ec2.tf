@@ -2,10 +2,9 @@ locals {
   backend_image = "${module.ecr.repository_urls[local.backend_repository_name]}:latest"
   ecr_registry  = split("/", module.ecr.repository_urls[local.backend_repository_name])[0]
 
-  backend_cors_allowed_origins = join(",", compact([
-    local.cloudfront_frontend_base_url,
-    local.custom_domain_enabled ? local.custom_frontend_base_url : null
-  ]))
+  # Do NOT reference module.static_site here.
+  # The frontend CloudFront distribution depends on backend_ec2 for /api/*.
+  backend_cors_allowed_origins = local.frontend_public_base_url != "" ? local.frontend_public_base_url : "*"
 }
 
 module "backend_ec2" {

@@ -85,6 +85,11 @@ jobs:
         if: vars.ENABLE_CUSTOM_DOMAIN == 'true'
         working-directory: infra/terraform/environments/dev
         run: |
+          FRONTEND_PUBLIC_BASE_URL="${{ vars.FRONTEND_PUBLIC_BASE_URL }}"
+          if [ -z "$FRONTEND_PUBLIC_BASE_URL" ] && [ -n "${{ vars.ROOT_DOMAIN }}" ] && [ -n "${{ vars.FRONTEND_SUBDOMAIN }}" ]; then
+            FRONTEND_PUBLIC_BASE_URL="https://${{ vars.FRONTEND_SUBDOMAIN }}.${{ vars.ROOT_DOMAIN }}"
+          fi
+
           cat > terraform.tfvars <<EOF
           project_name         = "${{ vars.PROJECT_NAME }}"
           environment          = "${{ vars.ENVIRONMENT }}"
@@ -92,6 +97,7 @@ jobs:
           enable_custom_domain = ${{ vars.ENABLE_CUSTOM_DOMAIN }}
           root_domain          = "${{ vars.ROOT_DOMAIN }}"
           frontend_subdomain   = "${{ vars.FRONTEND_SUBDOMAIN }}"
+          frontend_public_base_url = "$FRONTEND_PUBLIC_BASE_URL"
           route53_dns_role_arn = "${{ vars.ROUTE53_DNS_ROLE_ARN }}"
           app_secret_name      = "${{ vars.SECRET_NAME }}"
           EOF

@@ -63,3 +63,9 @@ variable "instance_type" {
   type        = string
   default     = "t3.micro"
 }
+
+variable "frontend_public_base_url" {
+  description = "Canonical public frontend base URL. Auto-derived by automation from Route53/domain inputs when available."
+  type        = string
+  default     = ""
+}

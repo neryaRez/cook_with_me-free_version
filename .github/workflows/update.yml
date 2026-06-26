@@ -121,6 +121,11 @@ jobs:
         if: needs.detect-changes.outputs.infra == 'true'
         working-directory: infra/terraform/environments/dev
         run: |
+          FRONTEND_PUBLIC_BASE_URL="${{ vars.FRONTEND_PUBLIC_BASE_URL }}"
+          if [ -z "$FRONTEND_PUBLIC_BASE_URL" ] && [ -n "${{ vars.ROOT_DOMAIN }}" ] && [ -n "${{ vars.FRONTEND_SUBDOMAIN }}" ]; then
+            FRONTEND_PUBLIC_BASE_URL="https://${{ vars.FRONTEND_SUBDOMAIN }}.${{ vars.ROOT_DOMAIN }}"
+          fi
+
           cat > terraform.tfvars <<EOF
           project_name         = "${{ vars.PROJECT_NAME }}"
           environment          = "${{ vars.ENVIRONMENT }}"
@@ -128,6 +133,7 @@ jobs:
           enable_custom_domain = ${{ steps.domain_state.outputs.enabled }}
           root_domain          = "${{ vars.ROOT_DOMAIN }}"
           frontend_subdomain   = "${{ vars.FRONTEND_SUBDOMAIN }}"
+          frontend_public_base_url = "$FRONTEND_PUBLIC_BASE_URL"
           route53_dns_role_arn = "${{ vars.ROUTE53_DNS_ROLE_ARN }}"
           app_secret_name      = "${{ vars.SECRET_NAME }}"
           EOF
@@ -161,6 +167,26 @@ jobs:
             echo "cloudfront_distribution_id=$(terraform output -raw cloudfront_distribution_id)"
             echo "frontend_base_url=$(terraform output -raw frontend_base_url)"
           } >> "$GITHUB_OUTPUT"
+
+      - name: Align Cognito app client URLs
+        run: |
+          FRONTEND_URL="${{ steps.tf_outputs.outputs.frontend_base_url }}"
+
+          aws cognito-idp update-user-pool-client \
+            --user-pool-id "${{ steps.tf_outputs.outputs.cognito_user_pool_id }}" \
+            --client-id "${{ steps.tf_outputs.outputs.cognito_app_client_id }}" \
+            --supported-identity-providers COGNITO \
+            --callback-urls "$FRONTEND_URL/auth/callback" \
+            --logout-urls "$FRONTEND_URL" \
+            --allowed-o-auth-flows-user-pool-client \
+            --allowed-o-auth-flows code \
+            --allowed-o-auth-scopes openid email profile \
+            --explicit-auth-flows ALLOW_USER_SRP_AUTH ALLOW_USER_PASSWORD_AUTH ALLOW_REFRESH_TOKEN_AUTH \
+            --prevent-user-existence-errors ENABLED \
+            --access-token-validity 60 \
+            --id-token-validity 60 \
+            --refresh-token-validity 30 \
+            --token-validity-units AccessToken=minutes,IdToken=minutes,RefreshToken=days
 
   # Runs on backend changes OR infra changes: an infra change can replace
   # the EC2 instance or alter user_data/IAM/SG, so the backend needs to be

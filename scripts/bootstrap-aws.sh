@@ -299,6 +299,20 @@ import_existing_bootstrap_resources_if_needed() {
     echo "ℹ️ tfstate bucket does not exist yet. Terraform will create it."
   fi
 
+  local github_oidc_provider_arn
+  github_oidc_provider_arn="$(detect_github_oidc_provider_arn || true)"
+
+  if [[ -n "$github_oidc_provider_arn" ]]; then
+    if terraform_state_has "aws_iam_openid_connect_provider.github_actions"; then
+      echo "✅ GitHub OIDC provider already tracked by Terraform state."
+    else
+      echo "✅ Existing GitHub OIDC provider found. Importing into Terraform state: $github_oidc_provider_arn"
+      terraform -chdir="$BOOTSTRAP_DIR" import aws_iam_openid_connect_provider.github_actions "$github_oidc_provider_arn"
+    fi
+  else
+    echo "ℹ️ GitHub OIDC provider does not exist yet. Terraform will create it."
+  fi
+
   if aws iam get-role --role-name "$GITHUB_ACTIONS_ROLE_NAME" >/dev/null 2>&1; then
     if terraform_state_has "aws_iam_role.github_actions"; then
       echo "✅ GitHub Actions role already tracked by Terraform state."
@@ -374,6 +388,11 @@ if [[ -z "$ROUTE53_DNS_ROLE_ARN" ]]; then
 fi
 
 resolve_dns_strategy
+
+FRONTEND_PUBLIC_BASE_URL=""
+if [[ -n "${ROOT_DOMAIN_DETECTED:-}" && -n "${FRONTEND_SUBDOMAIN:-}" ]]; then
+  FRONTEND_PUBLIC_BASE_URL="https://${FRONTEND_SUBDOMAIN}.${ROOT_DOMAIN_DETECTED}"
+fi
 
 echo
 echo "==> Detecting GitHub Actions OIDC provider..."
@@ -458,6 +477,7 @@ put_github_variable SECRET_NAME "$SECRET_NAME"
 put_github_variable ENABLE_CUSTOM_DOMAIN "$ENABLE_CUSTOM_DOMAIN"
 put_github_variable ROOT_DOMAIN "$ROOT_DOMAIN_DETECTED"
 put_github_variable FRONTEND_SUBDOMAIN "$FRONTEND_SUBDOMAIN"
+put_github_variable FRONTEND_PUBLIC_BASE_URL "$FRONTEND_PUBLIC_BASE_URL"
 put_github_variable DNS_MODE "$DNS_MODE"
 put_github_variable DNS_HOSTED_ZONE_ID "$DNS_HOSTED_ZONE_ID"
 put_github_variable ROUTE53_DNS_ROLE_ARN "$ROUTE53_DNS_ROLE_ARN"

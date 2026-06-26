@@ -104,6 +104,6 @@ output "backend_image" {
 }
 
 output "backend_api_base_url" {
-  description = "Backend API base URL through CloudFront."
-  value       = "https://${aws_cloudfront_distribution.backend_api.domain_name}"
+  description = "Backend API base URL through the existing frontend CloudFront distribution."
+  value       = local.custom_domain_enabled ? local.custom_frontend_base_url : local.cloudfront_frontend_base_url
 }
