@@ -177,33 +177,33 @@ jobs:
           ECR_REGISTRY="$(echo "${{ steps.tf_outputs.outputs.backend_ecr_repository_url }}" | cut -d/ -f1)"
 
           SSM_SCRIPT="$(cat <<'SSM_SCRIPT'
-set -euo pipefail
+            set -euo pipefail
 
-ECR_REGISTRY="__ECR_REGISTRY__"
-AWS_REGION="__AWS_REGION__"
+            ECR_REGISTRY="__ECR_REGISTRY__"
+            AWS_REGION="__AWS_REGION__"
 
-for i in {1..60}; do
-  if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1 && test -f /opt/cook-with-me/docker-compose.yml; then
-    break
-  fi
+            for i in {1..60}; do
+              if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1 && test -f /opt/cook-with-me/docker-compose.yml; then
+                break
+              fi
 
-  echo "waiting for docker and user_data ($i/60)"
-  sleep 10
-done
+              echo "waiting for docker and user_data ($i/60)"
+              sleep 10
+            done
 
-command -v docker
-docker compose version
-test -f /opt/cook-with-me/docker-compose.yml
+            command -v docker
+            docker compose version
+            test -f /opt/cook-with-me/docker-compose.yml
 
-cd /opt/cook-with-me
+            cd /opt/cook-with-me
 
-aws ecr get-login-password --region "$AWS_REGION" \
-  | docker login --username AWS --password-stdin "$ECR_REGISTRY"
+            aws ecr get-login-password --region "$AWS_REGION" \
+              | docker login --username AWS --password-stdin "$ECR_REGISTRY"
 
-docker compose pull
-docker compose up -d
-SSM_SCRIPT
-)"
+            docker compose pull
+            docker compose up -d
+            SSM_SCRIPT
+            )"
           SSM_SCRIPT="${SSM_SCRIPT//__ECR_REGISTRY__/$ECR_REGISTRY}"
           SSM_SCRIPT="${SSM_SCRIPT//__AWS_REGION__/${{ vars.AWS_REGION }}}"
 
