@@ -175,37 +175,106 @@ jobs:
         run: |
           INSTANCE_ID="${{ steps.tf_outputs.outputs.backend_instance_id }}"
           ECR_REGISTRY="$(echo "${{ steps.tf_outputs.outputs.backend_ecr_repository_url }}" | cut -d/ -f1)"
+          BACKEND_IMAGE="${{ steps.tf_outputs.outputs.backend_ecr_repository_url }}:latest"
+          SECRET_NAME="${{ vars.SECRET_NAME }}"
+          FRONTEND_URL="${{ steps.tf_outputs.outputs.frontend_base_url }}"
+          COGNITO_USER_POOL_ID="${{ steps.tf_outputs.outputs.cognito_user_pool_id }}"
+          COGNITO_APP_CLIENT_ID="${{ steps.tf_outputs.outputs.cognito_app_client_id }}"
 
-          SSM_SCRIPT="$(cat <<'SSM_SCRIPT'
+          cat > /tmp/cook-ssm-script.sh <<'SSM_SCRIPT'
           set -euo pipefail
+
+          APP_DIR="/opt/cook-with-me"
+          RUNTIME_ENV="$APP_DIR/runtime.env"
+          COMPOSE_FILE="$APP_DIR/docker-compose.yml"
+          COMPOSE_ENV="$APP_DIR/.env"
 
           ECR_REGISTRY="__ECR_REGISTRY__"
           AWS_REGION="__AWS_REGION__"
+          SECRET_NAME="__SECRET_NAME__"
+          BACKEND_IMAGE="__BACKEND_IMAGE__"
+          FRONTEND_URL="__FRONTEND_URL__"
+          COGNITO_USER_POOL_ID="__COGNITO_USER_POOL_ID__"
+          COGNITO_APP_CLIENT_ID="__COGNITO_APP_CLIENT_ID__"
 
-          for i in {1..60}; do
-            if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1 && test -f /opt/cook-with-me/docker-compose.yml; then
-              break
-            fi
+          mkdir -p "$APP_DIR"
+          chmod 750 "$APP_DIR"
 
-            echo "waiting for docker and user_data ($i/60)"
-            sleep 10
-          done
+          if ! command -v docker >/dev/null 2>&1; then
+            dnf install -y docker jq awscli curl
+          else
+            dnf install -y jq awscli curl || true
+          fi
 
-          command -v docker
-          docker compose version
-          test -f /opt/cook-with-me/docker-compose.yml
+          systemctl enable docker
+          systemctl start docker
 
-          cd /opt/cook-with-me
+          if ! docker compose version >/dev/null 2>&1; then
+            mkdir -p /usr/local/lib/docker/cli-plugins
+            curl -fsSL "https://github.com/docker/compose/releases/download/v2.29.7/docker-compose-linux-x86_64" -o /usr/local/lib/docker/cli-plugins/docker-compose
+            chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+          fi
 
-          aws ecr get-login-password --region "$AWS_REGION" \
-            | docker login --username AWS --password-stdin "$ECR_REGISTRY"
+          aws secretsmanager get-secret-value --region "$AWS_REGION" --secret-id "$SECRET_NAME" --query SecretString --output text > /tmp/cook-secret.json
+
+          {
+            echo "DATABASE_URL=$(jq -r '.DATABASE_URL // ""' /tmp/cook-secret.json)"
+            echo "OPENAI_API_KEY=$(jq -r '.OPENAI_API_KEY // ""' /tmp/cook-secret.json)"
+            echo "CORS_ALLOWED_ORIGINS=$FRONTEND_URL"
+            echo "AWS_REGION=$AWS_REGION"
+            echo "COGNITO_USER_POOL_ID=$COGNITO_USER_POOL_ID"
+            echo "COGNITO_APP_CLIENT_ID=$COGNITO_APP_CLIENT_ID"
+          } > "$RUNTIME_ENV"
+
+          chmod 600 "$RUNTIME_ENV"
+          rm -f /tmp/cook-secret.json
+
+          cat > "$COMPOSE_ENV" <<EOF
+          BACKEND_IMAGE=$BACKEND_IMAGE
+          EOF
+          chmod 600 "$COMPOSE_ENV"
+
+          cat > "$COMPOSE_FILE" <<'COMPOSE'
+          services:
+            backend:
+              image: ${BACKEND_IMAGE}
+              container_name: cook-with-me-backend
+              restart: unless-stopped
+              ports:
+                - "80:8080"
+              env_file:
+                - /opt/cook-with-me/runtime.env
+              environment:
+                PORT: "8080"
+                FLASK_ENV: "production"
+              healthcheck:
+                test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/health"]
+                interval: 30s
+                timeout: 5s
+                retries: 3
+                start_period: 20s
+          COMPOSE
+
+          cd "$APP_DIR"
+
+          aws ecr get-login-password --region "$AWS_REGION" | docker login --username AWS --password-stdin "$ECR_REGISTRY"
 
           docker compose pull
           docker compose up -d
+
+          docker ps
+          curl -fsS http://127.0.0.1:8080/health
           SSM_SCRIPT
-          )"
-          SSM_SCRIPT="${SSM_SCRIPT//__ECR_REGISTRY__/$ECR_REGISTRY}"
-          SSM_SCRIPT="${SSM_SCRIPT//__AWS_REGION__/${{ vars.AWS_REGION }}}"
+
+          sed -i "s#__ECR_REGISTRY__#$ECR_REGISTRY#g" /tmp/cook-ssm-script.sh
+          sed -i "s#__AWS_REGION__#${{ vars.AWS_REGION }}#g" /tmp/cook-ssm-script.sh
+          sed -i "s#__SECRET_NAME__#$SECRET_NAME#g" /tmp/cook-ssm-script.sh
+          sed -i "s#__BACKEND_IMAGE__#$BACKEND_IMAGE#g" /tmp/cook-ssm-script.sh
+          sed -i "s#__FRONTEND_URL__#$FRONTEND_URL#g" /tmp/cook-ssm-script.sh
+          sed -i "s#__COGNITO_USER_POOL_ID__#$COGNITO_USER_POOL_ID#g" /tmp/cook-ssm-script.sh
+          sed -i "s#__COGNITO_APP_CLIENT_ID__#$COGNITO_APP_CLIENT_ID#g" /tmp/cook-ssm-script.sh
+
+          SSM_SCRIPT="$(cat /tmp/cook-ssm-script.sh)"
 
           COMMAND_ID=$(aws ssm send-command \
             --instance-ids "$INSTANCE_ID" \
