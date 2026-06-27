@@ -201,9 +201,9 @@ jobs:
           chmod 750 "$APP_DIR"
 
           if ! command -v docker >/dev/null 2>&1; then
-            dnf install -y docker jq awscli curl
+            dnf install -y docker jq awscli
           else
-            dnf install -y jq awscli curl || true
+            dnf install -y jq awscli || true
           fi
 
           systemctl enable docker
