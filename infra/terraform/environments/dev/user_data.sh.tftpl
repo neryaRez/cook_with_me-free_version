@@ -10,7 +10,11 @@ mkdir -p "$APP_DIR"
 chmod 750 "$APP_DIR"
 
 dnf update -y
-dnf install -y docker jq awscli curl
+dnf install -y docker jq awscli
+
+if ! command -v curl >/dev/null 2>&1; then
+  dnf install -y curl-minimal || true
+fi
 
 systemctl enable docker
 systemctl start docker
