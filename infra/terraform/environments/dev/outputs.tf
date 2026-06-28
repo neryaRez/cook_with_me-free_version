@@ -107,3 +107,13 @@ output "backend_api_base_url" {
   description = "Backend API base URL through the existing frontend CloudFront distribution."
   value       = local.custom_domain_enabled ? local.custom_frontend_base_url : local.cloudfront_frontend_base_url
 }
+
+output "app_media_bucket_name" {
+  description = "Private media S3 bucket name."
+  value       = module.private_media_bucket.private_media_bucket_name
+}
+
+output "app_media_bucket_arn" {
+  description = "Private media S3 bucket ARN."
+  value       = module.private_media_bucket.private_media_bucket_arn
+}

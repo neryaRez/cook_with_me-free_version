@@ -51,6 +51,7 @@ jobs:
       static_site_bucket_name: ${{ steps.tf_outputs.outputs.static_site_bucket_name }}
       cloudfront_distribution_id: ${{ steps.tf_outputs.outputs.cloudfront_distribution_id }}
       frontend_base_url: ${{ steps.tf_outputs.outputs.frontend_base_url }}
+      app_media_bucket_name: ${{ steps.tf_outputs.outputs.app_media_bucket_name }}
     steps:
       - uses: actions/checkout@v4
 
@@ -165,6 +166,7 @@ jobs:
             echo "static_site_bucket_name=$(terraform output -raw static_site_bucket_name)"
             echo "cloudfront_distribution_id=$(terraform output -raw cloudfront_distribution_id)"
             echo "frontend_base_url=$(terraform output -raw frontend_base_url)"
+            echo "app_media_bucket_name=$(terraform output -raw app_media_bucket_name)"
           } >> "$GITHUB_OUTPUT"
 
       - name: Align Cognito app client URLs
@@ -225,6 +227,7 @@ jobs:
 
           AWS_REGION="__AWS_REGION__"
           ECR_REGISTRY="__ECR_REGISTRY__"
+          APP_MEDIA_BUCKET_NAME="__APP_MEDIA_BUCKET_NAME__"
 
           APP_DIR="/opt/cook-with-me"
 
@@ -241,6 +244,12 @@ jobs:
           echo "=== ecr login ==="
           aws ecr get-login-password --region "$AWS_REGION" \
             | docker login --username AWS --password-stdin "$ECR_REGISTRY"
+
+          echo "=== sync runtime env ==="
+          if [ -n "$APP_MEDIA_BUCKET_NAME" ]; then
+            sed -i '/^APP_MEDIA_BUCKET_NAME=/d' "$APP_DIR/runtime.env"
+            echo "APP_MEDIA_BUCKET_NAME=$APP_MEDIA_BUCKET_NAME" >> "$APP_DIR/runtime.env"
+          fi
 
           echo "=== deploy backend ==="
           docker compose pull backend
@@ -270,6 +279,7 @@ jobs:
 
           sed -i "s#__AWS_REGION__#${{ vars.AWS_REGION }}#g" /tmp/deploy-backend.sh
           sed -i "s#__ECR_REGISTRY__#$ECR_REGISTRY#g" /tmp/deploy-backend.sh
+          sed -i "s#__APP_MEDIA_BUCKET_NAME__#${{ needs.terraform.outputs.app_media_bucket_name }}#g" /tmp/deploy-backend.sh
 
           SSM_SCRIPT="$(cat /tmp/deploy-backend.sh)"
 

@@ -74,6 +74,22 @@ data "aws_iam_policy_document" "ec2_runtime" {
 
     resources = ["*"]
   }
+
+  statement {
+    sid    = "PrivateMediaS3Access"
+    effect = "Allow"
+
+    actions = [
+      "s3:PutObject",
+      "s3:GetObject",
+      "s3:DeleteObject",
+    ]
+
+    resources = [
+      "${module.private_media_bucket.private_media_bucket_arn}/recipes/*",
+      "${module.private_media_bucket.private_media_bucket_arn}/profiles/*",
+    ]
+  }
 }
 
 resource "aws_iam_policy" "ec2_runtime" {
