@@ -90,6 +90,15 @@ data "aws_iam_policy_document" "ec2_runtime" {
       "${module.private_media_bucket.private_media_bucket_arn}/profiles/*",
     ]
   }
+
+  statement {
+    sid     = "ReadMediaBucketNameParameter"
+    effect  = "Allow"
+    actions = ["ssm:GetParameter"]
+    resources = [
+      "arn:aws:ssm:${var.aws_region}:${data.aws_caller_identity.current.account_id}:parameter/${local.name_prefix}/app-media-bucket-name"
+    ]
+  }
 }
 
 resource "aws_iam_policy" "ec2_runtime" {

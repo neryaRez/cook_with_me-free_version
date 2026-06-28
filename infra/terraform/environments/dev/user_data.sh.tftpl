@@ -43,6 +43,28 @@ aws secretsmanager get-secret-value \
   echo "COGNITO_APP_CLIENT_ID=${cognito_app_client_id}"
 } > "$RUNTIME_ENV"
 
+APP_MEDIA_BUCKET_NAME_VALUE=""
+for i in $(seq 1 10); do
+  val="$(aws ssm get-parameter \
+    --region "${aws_region}" \
+    --name "${app_media_bucket_ssm_param}" \
+    --query Parameter.Value \
+    --output text 2>/dev/null)"
+  if [ -n "$val" ]; then
+    APP_MEDIA_BUCKET_NAME_VALUE="$val"
+    break
+  fi
+  echo "SSM: app-media-bucket-name not yet readable (attempt $i/10), retrying in 6s..."
+  sleep 6
+done
+
+if [ -z "$APP_MEDIA_BUCKET_NAME_VALUE" ]; then
+  echo "ERROR: Failed to read ${app_media_bucket_ssm_param} after 10 attempts. Aborting user_data."
+  exit 1
+fi
+
+echo "APP_MEDIA_BUCKET_NAME=$APP_MEDIA_BUCKET_NAME_VALUE" >> "$RUNTIME_ENV"
+
 chmod 600 "$RUNTIME_ENV"
 rm -f /tmp/cook-secret.json
 

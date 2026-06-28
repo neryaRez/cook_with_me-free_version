@@ -11,3 +11,10 @@ module "private_media_bucket" {
 
   tags = local.common_tags
 }
+
+resource "aws_ssm_parameter" "app_media_bucket_name" {
+  name  = "/${local.name_prefix}/app-media-bucket-name"
+  type  = "String"
+  value = module.private_media_bucket.private_media_bucket_name
+  tags  = local.common_tags
+}

@@ -18,14 +18,19 @@ module "backend_ec2" {
   iam_instance_profile_name = aws_iam_instance_profile.ec2.name
 
   user_data = templatefile("${path.module}/user_data.sh.tftpl", {
-    aws_region            = var.aws_region
-    app_secret_name       = var.app_secret_name
-    backend_image         = local.backend_image
-    ecr_registry          = local.ecr_registry
-    cors_allowed_origins  = local.backend_cors_allowed_origins
-    cognito_user_pool_id  = module.cognito.user_pool_id
-    cognito_app_client_id = module.cognito.app_client_id
+    aws_region                 = var.aws_region
+    app_secret_name            = var.app_secret_name
+    backend_image              = local.backend_image
+    ecr_registry               = local.ecr_registry
+    cors_allowed_origins       = local.backend_cors_allowed_origins
+    cognito_user_pool_id       = module.cognito.user_pool_id
+    cognito_app_client_id      = module.cognito.app_client_id
+    app_media_bucket_ssm_param = aws_ssm_parameter.app_media_bucket_name.name
   })
 
   tags = local.common_tags
+
+  depends_on = [
+    aws_iam_role_policy_attachment.ec2_runtime,
+  ]
 }
