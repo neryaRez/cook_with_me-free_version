@@ -4,7 +4,7 @@ resource "aws_instance" "this" {
   subnet_id                   = var.subnet_id
   vpc_security_group_ids      = var.security_group_ids
   iam_instance_profile        = var.iam_instance_profile_name
-  user_data_replace_on_change = true
+  user_data_replace_on_change = false
   user_data                   = var.user_data
 
   metadata_options {

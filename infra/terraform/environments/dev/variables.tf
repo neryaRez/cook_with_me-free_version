@@ -31,7 +31,7 @@ variable "root_domain" {
 variable "frontend_subdomain" {
   description = "Frontend subdomain, for example cook."
   type        = string
-  default     = "cook"
+  default     = "cookwithme"
 }
 
 variable "route53_dns_role_arn" {
