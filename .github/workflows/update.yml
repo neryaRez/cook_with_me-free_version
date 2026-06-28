@@ -192,7 +192,7 @@ jobs:
   # redeployed/restarted safely either way.
   deploy-backend:
     needs: [detect-changes, terraform]
-    if: needs.detect-changes.outputs.backend == 'true' || needs.detect-changes.outputs.infra == 'true'
+    if: needs.detect-changes.outputs.backend == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -324,7 +324,7 @@ jobs:
 
   deploy-frontend:
     needs: [detect-changes, terraform]
-    if: needs.detect-changes.outputs.frontend == 'true' || needs.detect-changes.outputs.infra == 'true'
+    if: needs.detect-changes.outputs.frontend == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
