@@ -122,10 +122,89 @@ jobs:
         working-directory: infra/terraform/environments/dev
         run: terraform apply -input=false -auto-approve tfplan
 
-      - name: Show custom domain
+      - name: Capture Terraform outputs
         if: vars.ENABLE_CUSTOM_DOMAIN == 'true'
+        id: tf_outputs
         working-directory: infra/terraform/environments/dev
         run: |
-          echo "Custom frontend domain: $(terraform output -raw custom_frontend_domain)"
-          echo "Frontend base URL:      $(terraform output -raw frontend_base_url)"
+          {
+            echo "backend_api_base_url=$(terraform output -raw backend_api_base_url)"
+            echo "cognito_user_pool_id=$(terraform output -raw cognito_user_pool_id)"
+            echo "cognito_app_client_id=$(terraform output -raw cognito_app_client_id)"
+            echo "static_site_bucket_name=$(terraform output -raw static_site_bucket_name)"
+            echo "cloudfront_distribution_id=$(terraform output -raw cloudfront_distribution_id)"
+            echo "frontend_base_url=$(terraform output -raw frontend_base_url)"
+            echo "custom_frontend_domain=$(terraform output -raw custom_frontend_domain)"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Align Cognito app client URLs
+        if: vars.ENABLE_CUSTOM_DOMAIN == 'true'
+        run: |
+          FRONTEND_URL="${{ steps.tf_outputs.outputs.frontend_base_url }}"
+
+          aws cognito-idp update-user-pool-client \
+            --user-pool-id "${{ steps.tf_outputs.outputs.cognito_user_pool_id }}" \
+            --client-id "${{ steps.tf_outputs.outputs.cognito_app_client_id }}" \
+            --supported-identity-providers COGNITO \
+            --callback-urls "$FRONTEND_URL/auth/callback" \
+            --logout-urls "$FRONTEND_URL" \
+            --allowed-o-auth-flows-user-pool-client \
+            --allowed-o-auth-flows code \
+            --allowed-o-auth-scopes openid email profile \
+            --explicit-auth-flows ALLOW_USER_SRP_AUTH ALLOW_USER_PASSWORD_AUTH ALLOW_REFRESH_TOKEN_AUTH \
+            --prevent-user-existence-errors ENABLED \
+            --access-token-validity 60 \
+            --id-token-validity 60 \
+            --refresh-token-validity 30 \
+            --token-validity-units AccessToken=minutes,IdToken=minutes,RefreshToken=days
+
+      - name: Write frontend production env
+        if: vars.ENABLE_CUSTOM_DOMAIN == 'true'
+        working-directory: frontend
+        run: |
+          cat > .env.production <<EOF
+          VITE_API_BASE_URL=${{ steps.tf_outputs.outputs.backend_api_base_url }}
+          VITE_COGNITO_REGION=${{ vars.AWS_REGION }}
+          VITE_COGNITO_USER_POOL_ID=${{ steps.tf_outputs.outputs.cognito_user_pool_id }}
+          VITE_COGNITO_APP_CLIENT_ID=${{ steps.tf_outputs.outputs.cognito_app_client_id }}
+          EOF
+
+      - name: Setup Node
+        if: vars.ENABLE_CUSTOM_DOMAIN == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Build frontend
+        if: vars.ENABLE_CUSTOM_DOMAIN == 'true'
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+
+      - name: Sync frontend to S3
+        if: vars.ENABLE_CUSTOM_DOMAIN == 'true'
+        run: aws s3 sync frontend/dist "s3://${{ steps.tf_outputs.outputs.static_site_bucket_name }}" --delete
+
+      - name: Invalidate CloudFront
+        if: vars.ENABLE_CUSTOM_DOMAIN == 'true'
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id "${{ steps.tf_outputs.outputs.cloudfront_distribution_id }}" \
+            --paths "/*"
+
+      - name: Smoke test - custom frontend is reachable
+        if: vars.ENABLE_CUSTOM_DOMAIN == 'true'
+        run: curl -fsS "${{ steps.tf_outputs.outputs.frontend_base_url }}" > /dev/null
+
+      - name: Smoke test - custom backend health
+        if: vars.ENABLE_CUSTOM_DOMAIN == 'true'
+        run: curl -fsS "${{ steps.tf_outputs.outputs.backend_api_base_url }}/health" > /dev/null
+
+      - name: Show custom domain
+        if: vars.ENABLE_CUSTOM_DOMAIN == 'true'
+        run: |
+          echo "Custom frontend domain: ${{ steps.tf_outputs.outputs.custom_frontend_domain }}"
+          echo "Frontend base URL:      ${{ steps.tf_outputs.outputs.frontend_base_url }}"
+          echo "Backend API base URL:   ${{ steps.tf_outputs.outputs.backend_api_base_url }}"
           echo "DNS validation can take a few minutes to propagate."
