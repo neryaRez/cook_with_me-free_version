@@ -158,3 +158,11 @@ export async function updateMe(payload) {
   if (!USE_REAL_API) return payload
   return request('/api/me', { method: 'PUT', body: JSON.stringify(payload) })
 }
+
+export async function requestAvatarUploadUrl({ contentType, fileSize }) {
+  if (!USE_REAL_API) throw new Error('Avatar upload is not available in mock mode')
+  return request('/api/me/avatar/upload-url', {
+    method: 'POST',
+    body: JSON.stringify({ contentType, fileSize }),
+  })
+}

@@ -17,6 +17,7 @@ from .. import config
 
 _ALLOWED_EXTENSIONS = {"jpg", "jpeg", "png", "webp"}
 _ALLOWED_CONTENT_TYPES = {"image/jpeg", "image/png", "image/webp"}
+_CONTENT_TYPE_TO_EXT = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp"}
 
 
 def _client():
@@ -74,4 +75,12 @@ def make_recipe_image_key(owner_sub, recipe_id, filename):
 def make_avatar_key(owner_sub, filename):
     """Construct a deterministic private key for a user avatar."""
     ext = safe_extension(filename)
+    return f"profiles/{owner_sub}/avatar/{uuid.uuid4()}.{ext}"
+
+
+def make_avatar_key_from_content_type(owner_sub, content_type):
+    """Construct a private avatar key from a validated content type (no filename needed)."""
+    ext = _CONTENT_TYPE_TO_EXT.get(content_type)
+    if not ext:
+        raise ValueError(f"Content type '{content_type}' is not allowed")
     return f"profiles/{owner_sub}/avatar/{uuid.uuid4()}.{ext}"

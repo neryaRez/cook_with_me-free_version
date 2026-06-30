@@ -4,6 +4,10 @@ import AuthLayout from './AuthLayout.jsx'
 import Field, { inputClass } from '../../components/auth/Field.jsx'
 import { useAuth } from '../../context/AuthContext.jsx'
 import { CameraIcon } from '../../components/icons.jsx'
+import { requestAvatarUploadUrl } from '../../services/api.js'
+
+const ALLOWED_AVATAR_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp'])
+const MAX_AVATAR_BYTES = 5 * 1024 * 1024 // 5 MB
 
 export default function SetupProfilePage() {
   const navigate = useNavigate()
@@ -18,9 +22,11 @@ export default function SetupProfilePage() {
     isEditing ? user.username : sourceName.trim().split(/\s+/)[0]?.toLowerCase() ?? ''
   )
   const [bio, setBio] = useState(isEditing ? user.bio : '')
-  const [avatarUrl, setAvatarUrl] = useState(isEditing ? user.avatarUrl : '')
+  const [avatarFile, setAvatarFile] = useState(null)
+  const [avatarPreviewUrl, setAvatarPreviewUrl] = useState(isEditing ? user.avatarUrl : '')
   const [error, setError] = useState(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [uploadStatus, setUploadStatus] = useState(null)
 
   if (!user && !pendingSignup) {
     return <Navigate to="/signup" replace />
@@ -32,7 +38,19 @@ export default function SetupProfilePage() {
   function handleAvatarChange(event) {
     const file = event.target.files?.[0]
     if (!file) return
-    setAvatarUrl(URL.createObjectURL(file))
+
+    if (!ALLOWED_AVATAR_TYPES.has(file.type)) {
+      setError('Please upload a JPEG, PNG, or WebP image.')
+      return
+    }
+    if (file.size > MAX_AVATAR_BYTES) {
+      setError('Image must be 5 MB or smaller.')
+      return
+    }
+
+    setError(null)
+    setAvatarFile(file)
+    setAvatarPreviewUrl(URL.createObjectURL(file))
   }
 
   async function handleSubmit(event) {
@@ -47,7 +65,35 @@ export default function SetupProfilePage() {
 
     setIsSubmitting(true)
     try {
-      const payload = { displayName: displayName.trim(), username: username.trim(), bio: bio.trim(), avatarUrl }
+      let avatarKey
+
+      if (avatarFile) {
+        setUploadStatus('Uploading photo...')
+        const { uploadUrl, avatarKey: key, headers } = await requestAvatarUploadUrl({
+          contentType: avatarFile.type,
+          fileSize: avatarFile.size,
+        })
+        const uploadResponse = await fetch(uploadUrl, {
+          method: 'PUT',
+          body: avatarFile,
+          headers: { 'Content-Type': headers['Content-Type'] },
+        })
+
+        if (!uploadResponse.ok) {
+          throw new Error('Failed to upload profile photo.')
+        }
+
+        avatarKey = key
+        setUploadStatus(null)
+      }
+
+      const payload = {
+        displayName: displayName.trim(),
+        username: username.trim(),
+        bio: bio.trim(),
+      }
+      if (avatarKey) payload.avatarKey = avatarKey
+
       if (isEditing) {
         await updateProfile(payload)
       } else {
@@ -55,6 +101,7 @@ export default function SetupProfilePage() {
       }
       navigate('/')
     } catch (err) {
+      setUploadStatus(null)
       setError(err.message)
     } finally {
       setIsSubmitting(false)
@@ -93,7 +140,11 @@ export default function SetupProfilePage() {
             onClick={() => fileInputRef.current?.click()}
             className="group relative flex h-20 w-20 items-center justify-center overflow-hidden rounded-full bg-ember/15 text-xl font-bold text-ember-light"
           >
-            {avatarUrl ? <img src={avatarUrl} alt="" className="h-full w-full object-cover" /> : initials}
+            {avatarPreviewUrl ? (
+              <img src={avatarPreviewUrl} alt="" className="h-full w-full object-cover" />
+            ) : (
+              initials
+            )}
             <span className="absolute inset-0 flex items-center justify-center bg-ink/40 text-cream opacity-0 transition-opacity group-hover:opacity-100">
               <CameraIcon className="h-5 w-5" />
             </span>
@@ -101,7 +152,7 @@ export default function SetupProfilePage() {
           <input
             ref={fileInputRef}
             type="file"
-            accept="image/*"
+            accept="image/jpeg,image/png,image/webp"
             onChange={handleAvatarChange}
             className="hidden"
           />
@@ -110,8 +161,11 @@ export default function SetupProfilePage() {
             onClick={() => fileInputRef.current?.click()}
             className="text-xs font-semibold text-ember-light hover:underline"
           >
-            {avatarUrl ? 'Change photo' : 'Upload photo'}
+            {avatarPreviewUrl ? 'Change photo' : 'Upload photo'}
           </button>
+          {uploadStatus && (
+            <p className="text-xs text-muted">{uploadStatus}</p>
+          )}
         </div>
 
         <Field label="Display name">
@@ -156,7 +210,7 @@ export default function SetupProfilePage() {
           disabled={isSubmitting}
           className="flex w-full items-center justify-center gap-2 rounded-full bg-ember px-6 py-3 text-sm font-semibold text-cream shadow-md shadow-ember/25 transition-transform hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {isSubmitting ? 'Saving...' : isEditing ? 'Save changes' : 'Finish setup'}
+          {isSubmitting ? (uploadStatus ?? 'Saving...') : isEditing ? 'Save changes' : 'Finish setup'}
         </button>
       </form>
     </AuthLayout>

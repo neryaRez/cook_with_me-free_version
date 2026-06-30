@@ -8,6 +8,10 @@ version history yet) - replace with real Alembic migrations if that changes.
 
 from sqlalchemy import inspect, text
 
+_USERS_COLUMNS_TO_ADD = {
+    "avatar_key": "VARCHAR(500) NULL",
+}
+
 _RECIPE_COLUMNS_TO_ADD = {
     "owner_sub": "VARCHAR(64) NULL",
     "owner_email": "VARCHAR(255) NULL",
@@ -18,6 +22,14 @@ _RECIPE_COLUMNS_TO_ADD = {
 
 def run_migrations(engine):
     inspector = inspect(engine)
+
+    if "users" in inspector.get_table_names():
+        existing = {col["name"] for col in inspector.get_columns("users")}
+        with engine.begin() as conn:
+            for col, defn in _USERS_COLUMNS_TO_ADD.items():
+                if col not in existing:
+                    conn.execute(text(f"ALTER TABLE users ADD COLUMN {col} {defn}"))
+
     if "recipes" not in inspector.get_table_names():
         return
 
