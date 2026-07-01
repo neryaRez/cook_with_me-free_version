@@ -37,6 +37,7 @@ jobs:
             infra:
               - 'infra/terraform/environments/dev/**'
               - 'infra/terraform/modules/**'
+              - '.github/workflows/update.yml'
 
   terraform:
     needs: detect-changes
