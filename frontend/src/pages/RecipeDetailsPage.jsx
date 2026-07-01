@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { getRecipeById } from '../services/api.js'
+import { useAuth } from '../context/AuthContext.jsx'
 import Loader from '../components/Loader.jsx'
 import CommentSection from '../components/CommentSection.jsx'
 import { getTotalTime } from '../utils/recipe.js'
@@ -12,7 +13,12 @@ import {
   UsersIcon,
 } from '../components/icons.jsx'
 
+function isFakeAvatar(url) {
+  return typeof url === 'string' && url.includes('i.pravatar.cc')
+}
+
 export default function RecipeDetailsPage() {
+  const { user } = useAuth()
   const { id } = useParams()
   const [recipe, setRecipe] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -72,6 +78,27 @@ export default function RecipeDetailsPage() {
 
   const totalTime = getTotalTime(recipe)
 
+  const isOwnRecipe =
+    recipe?.isMine === true ||
+    recipe?.ownerSub === user?.sub ||
+    recipe?.author?.email === user?.email ||
+    recipe?.author?.name === 'You' ||
+    recipe?.author?.name === user?.username ||
+    recipe?.author?.name === user?.displayName
+
+  const authorName = isOwnRecipe
+    ? user?.username || user?.displayName || recipe?.author?.name || 'You'
+    : recipe?.author?.name || 'Cook'
+
+  const authorAvatar =
+    isOwnRecipe && user?.avatarUrl
+      ? user.avatarUrl
+      : !isFakeAvatar(recipe?.author?.avatar) && recipe?.author?.avatar
+        ? recipe.author.avatar
+        : null
+
+  const authorInitial = (authorName || 'C').charAt(0).toUpperCase()
+
   return (
     <div>
       <div className="relative h-72 w-full overflow-hidden sm:h-96">
@@ -97,12 +124,18 @@ export default function RecipeDetailsPage() {
       <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
         <div className="flex flex-wrap items-center gap-3">
           <div className="flex items-center gap-2 rounded-full border border-border-subtle/70 bg-card px-4 py-2 text-sm text-muted">
-            <img
-              src={recipe.author.avatar}
-              alt={recipe.author.name}
-              className="h-6 w-6 rounded-full object-cover"
-            />
-            <span className="text-cream">{recipe.author.name}</span>
+            <div className="flex h-6 w-6 items-center justify-center overflow-hidden rounded-full bg-ember/10 text-[10px] font-semibold text-ember">
+              {authorAvatar ? (
+                <img
+                  src={authorAvatar}
+                  alt={authorName}
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                authorInitial
+              )}
+            </div>
+            <span className="text-cream">{authorName}</span>
           </div>
           <div className="flex items-center gap-1.5 rounded-full border border-border-subtle/70 bg-card px-4 py-2 text-sm text-muted">
             <ClockIcon className="h-4 w-4" />
