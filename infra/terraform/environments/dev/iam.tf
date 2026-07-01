@@ -31,7 +31,7 @@ data "aws_iam_policy_document" "ec2_runtime" {
     ]
 
     resources = [
-      "arn:aws:secretsmanager:${var.aws_region}:${data.aws_caller_identity.current.account_id}:secret:${trimprefix(var.app_secret_name, "/")}*"
+      "arn:aws:secretsmanager:${var.aws_region}:${data.aws_caller_identity.current.account_id}:secret:${var.app_secret_name}*"
     ]
   }
 
