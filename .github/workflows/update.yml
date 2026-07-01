@@ -193,7 +193,7 @@ jobs:
   # redeployed/restarted safely either way.
   deploy-backend:
     needs: [detect-changes, terraform]
-    if: needs.detect-changes.outputs.backend == 'true' || needs.detect-changes.outputs.infra == 'true' || needs.detect-changes.outputs.infra == 'true'
+    if: needs.detect-changes.outputs.backend == 'true' || needs.detect-changes.outputs.infra == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -232,6 +232,16 @@ jobs:
           echo "=== verify machine is prepared by user_data ==="
           command -v docker
           docker compose version
+
+          echo "=== wait for cloud-init/user_data ==="
+          cloud-init status --wait || true
+
+          if [ ! -f "$APP_DIR/docker-compose.yml" ] || [ ! -f "$APP_DIR/.env" ] || [ ! -f "$APP_DIR/runtime.env" ]; then
+            echo "=== app files missing; rerun user_data once ==="
+            cloud-init single --name cc_scripts_user --frequency always
+          fi
+
+          echo "=== verify app files ==="
           test -d "$APP_DIR"
           test -f "$APP_DIR/docker-compose.yml"
           test -f "$APP_DIR/.env"
