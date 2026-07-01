@@ -27,6 +27,7 @@ class Recipe(Base):
     title = Column(String(255), nullable=False)
     description = Column(Text, nullable=False)
     image = Column(Text, nullable=False, default="")
+    image_key = Column(String(500), nullable=True)
     category = Column(String(100), nullable=False, default="Quick Meals")
     cuisine = Column(String(100), nullable=False, default="Fusion")
     difficulty = Column(String(50), nullable=False, default="Easy")

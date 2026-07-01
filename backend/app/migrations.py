@@ -13,6 +13,7 @@ _USERS_COLUMNS_TO_ADD = {
 }
 
 _RECIPE_COLUMNS_TO_ADD = {
+    "image_key": "VARCHAR(500) NULL",
     "owner_sub": "VARCHAR(64) NULL",
     "owner_email": "VARCHAR(255) NULL",
     "created_at": "DATETIME NULL DEFAULT CURRENT_TIMESTAMP",

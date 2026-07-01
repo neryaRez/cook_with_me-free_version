@@ -166,3 +166,12 @@ export async function requestAvatarUploadUrl({ contentType, fileSize }) {
     body: JSON.stringify({ contentType, fileSize }),
   })
 }
+
+
+export async function requestRecipeImageUploadUrl({ contentType, fileSize }) {
+  if (!USE_REAL_API) throw new Error('Recipe image upload is not available in mock mode')
+  return request('/api/recipes/image/upload-url', {
+    method: 'POST',
+    body: JSON.stringify({ contentType, fileSize }),
+  })
+}

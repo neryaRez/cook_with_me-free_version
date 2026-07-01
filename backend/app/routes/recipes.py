@@ -15,6 +15,7 @@ from .. import config
 from ..auth import require_auth
 from ..db import get_session
 from ..models import Recipe
+from ..services import s3_service
 
 recipes_bp = Blueprint("recipes", __name__, url_prefix="/api/recipes")
 
@@ -184,11 +185,15 @@ _RECIPES = [
 ]
 
 def _serialize_recipe(recipe):
+    image_url = s3_service.generate_presigned_get_url(recipe.image_key) or recipe.image
+
     return {
         "id": str(recipe.id),
         "title": recipe.title,
         "description": recipe.description,
-        "image": recipe.image,
+        "image": image_url,
+        "imageUrl": image_url,
+        "imageKey": recipe.image_key,
         "category": recipe.category,
         "cuisine": recipe.cuisine,
         "difficulty": recipe.difficulty,
@@ -252,6 +257,36 @@ def list_my_recipes():
     return jsonify({"data": mine})
 
 
+@recipes_bp.route("/image/upload-url", methods=["POST"])
+@require_auth
+def create_recipe_image_upload_url():
+    payload = request.get_json(silent=True) or {}
+    content_type = payload.get("contentType") or ""
+    file_size = int(payload.get("fileSize") or 0)
+
+    if file_size <= 0:
+        return jsonify({"error": "fileSize is required"}), 400
+
+    if file_size > 8 * 1024 * 1024:
+        return jsonify({"error": "Recipe image must be 8 MB or less"}), 400
+
+    owner_sub = g.current_user["sub"]
+
+    try:
+        image_key = s3_service.make_recipe_image_key_from_content_type(owner_sub, content_type)
+        upload_url = s3_service.generate_presigned_put_url(image_key, content_type)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    return jsonify({
+        "data": {
+            "uploadUrl": upload_url,
+            "imageKey": image_key,
+            "headers": {"Content-Type": content_type},
+        }
+    })
+
+
 @recipes_bp.route("/<recipe_id>", methods=["GET"])
 def get_recipe(recipe_id):
     if config.USE_DB:
@@ -285,6 +320,10 @@ def create_recipe():
     owner_email = g.current_user["email"] or ""
     author_name = owner_email.split("@")[0] if owner_email else "Guest Chef"
 
+    image_key = (payload.get("imageKey") or "").strip()
+    if image_key and not image_key.startswith(f"recipes/{owner_sub}/drafts/"):
+        return jsonify({"error": "Invalid recipe image key"}), 400
+
     if config.USE_DB:
         session = get_session()
         try:
@@ -292,6 +331,7 @@ def create_recipe():
                 title=payload["title"],
                 description=payload["description"],
                 image=payload.get("image", ""),
+                image_key=image_key or None,
                 category=payload.get("category", "Quick Meals"),
                 cuisine=payload.get("cuisine", "Fusion"),
                 difficulty=payload.get("difficulty", "Easy"),
@@ -325,6 +365,7 @@ def create_recipe():
         "title": payload["title"],
         "description": payload["description"],
         "image": payload.get("image", ""),
+        "imageKey": image_key or None,
         "category": payload.get("category", "Quick Meals"),
         "cuisine": payload.get("cuisine", "Fusion"),
         "difficulty": payload.get("difficulty", "Easy"),

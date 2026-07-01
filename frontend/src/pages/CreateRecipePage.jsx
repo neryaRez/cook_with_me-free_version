@@ -1,12 +1,14 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { createRecipe } from '../services/api.js'
+import { createRecipe, requestRecipeImageUploadUrl } from '../services/api.js'
 import { categories, tags as tagOptions } from '../data/categories.js'
 import { ChefHatIcon, PlusIcon, CloseIcon } from '../components/icons.jsx'
 
 const DIFFICULTIES = ['Easy', 'Medium', 'Hard']
 
 const EMPTY_INGREDIENT = { item: '', amount: '' }
+const ALLOWED_RECIPE_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp'])
+const MAX_RECIPE_IMAGE_BYTES = 8 * 1024 * 1024
 
 const initialFormState = {
   title: '',
@@ -21,6 +23,7 @@ const initialFormState = {
 }
 
 export default function CreateRecipePage() {
+  const imageInputRef = useRef(null)
   const [form, setForm] = useState(initialFormState)
   const [selectedTags, setSelectedTags] = useState([])
   const [ingredients, setIngredients] = useState([{ ...EMPTY_INGREDIENT }])
@@ -28,6 +31,29 @@ export default function CreateRecipePage() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [createdRecipe, setCreatedRecipe] = useState(null)
   const [error, setError] = useState(null)
+  const [recipeImageFile, setRecipeImageFile] = useState(null)
+  const [recipeImagePreviewUrl, setRecipeImagePreviewUrl] = useState('')
+
+  function handleRecipeImageChange(event) {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    setError(null)
+
+    if (!ALLOWED_RECIPE_IMAGE_TYPES.has(file.type)) {
+      setError('Please upload a JPEG, PNG, or WebP recipe image.')
+      return
+    }
+
+    if (file.size > MAX_RECIPE_IMAGE_BYTES) {
+      setError('Recipe image must be 8 MB or less.')
+      return
+    }
+
+    setRecipeImageFile(file)
+    setRecipeImagePreviewUrl(URL.createObjectURL(file))
+    updateField('image', '')
+  }
 
   function updateField(field, value) {
     setForm((prev) => ({ ...prev, [field]: value }))
@@ -78,12 +104,36 @@ export default function CreateRecipePage() {
     setIsSubmitting(true)
 
     try {
+      let imageKey
+
+      if (recipeImageFile) {
+        const { uploadUrl, imageKey: key, headers } = await requestRecipeImageUploadUrl({
+          contentType: recipeImageFile.type,
+          fileSize: recipeImageFile.size,
+        })
+
+        const uploadResponse = await fetch(uploadUrl, {
+          method: 'PUT',
+          headers,
+          body: recipeImageFile,
+        })
+
+        if (!uploadResponse.ok) {
+          throw new Error('Failed to upload recipe image.')
+        }
+
+        imageKey = key
+      }
+
       const newRecipe = await createRecipe({
         title: form.title.trim(),
         description: form.description.trim(),
         image:
-          form.image.trim() ||
-          'https://images.unsplash.com/photo-1495521821757-a1efb6729352?auto=format&fit=crop&w=1200&q=80',
+          imageKey
+            ? ''
+            : form.image.trim() ||
+              'https://images.unsplash.com/photo-1495521821757-a1efb6729352?auto=format&fit=crop&w=1200&q=80',
+        ...(imageKey ? { imageKey } : {}),
         category: form.category,
         cuisine: form.cuisine.trim() || 'Fusion',
         difficulty: form.difficulty,
@@ -108,6 +158,8 @@ export default function CreateRecipePage() {
     setSelectedTags([])
     setIngredients([{ ...EMPTY_INGREDIENT }])
     setSteps([''])
+    setRecipeImageFile(null)
+    setRecipeImagePreviewUrl('')
     setCreatedRecipe(null)
   }
 
@@ -178,14 +230,61 @@ export default function CreateRecipePage() {
             />
           </Field>
 
-          <Field label="Image URL (optional)">
-            <input
-              type="url"
-              value={form.image}
-              onChange={(event) => updateField('image', event.target.value)}
-              placeholder="https://..."
-              className={inputClass}
-            />
+          <Field label="Recipe photo">
+            <div className="space-y-3">
+              <input
+                ref={imageInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                onChange={handleRecipeImageChange}
+                className="hidden"
+              />
+
+              {recipeImagePreviewUrl ? (
+                <div className="overflow-hidden rounded-2xl border border-border-subtle/70 bg-surface">
+                  <img
+                    src={recipeImagePreviewUrl}
+                    alt=""
+                    className="h-56 w-full object-cover"
+                  />
+                </div>
+              ) : null}
+
+              <div className="flex flex-col gap-3 sm:flex-row">
+                <button
+                  type="button"
+                  onClick={() => imageInputRef.current?.click()}
+                  className="rounded-full bg-ember px-4 py-2 text-sm font-semibold text-cream hover:bg-ember-dark"
+                >
+                  {recipeImagePreviewUrl ? 'Change photo' : 'Upload photo'}
+                </button>
+
+                {recipeImagePreviewUrl ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setRecipeImageFile(null)
+                      setRecipeImagePreviewUrl('')
+                    }}
+                    className="rounded-full border border-border-subtle/70 bg-card px-4 py-2 text-sm font-semibold text-cream hover:border-ember/40"
+                  >
+                    Remove photo
+                  </button>
+                ) : null}
+              </div>
+
+              <input
+                type="url"
+                value={form.image}
+                onChange={(event) => {
+                  setRecipeImageFile(null)
+                  setRecipeImagePreviewUrl('')
+                  updateField('image', event.target.value)
+                }}
+                placeholder="Or paste an image URL"
+                className={inputClass}
+              />
+            </div>
           </Field>
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

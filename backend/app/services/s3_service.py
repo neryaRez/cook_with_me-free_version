@@ -84,3 +84,11 @@ def make_avatar_key_from_content_type(owner_sub, content_type):
     if not ext:
         raise ValueError(f"Content type '{content_type}' is not allowed")
     return f"profiles/{owner_sub}/avatar/{uuid.uuid4()}.{ext}"
+
+
+def make_recipe_image_key_from_content_type(owner_sub, content_type):
+    """Construct a private draft recipe image key from a validated content type."""
+    ext = _CONTENT_TYPE_TO_EXT.get(content_type)
+    if not ext:
+        raise ValueError(f"Content type '{content_type}' is not allowed")
+    return f"recipes/{owner_sub}/drafts/{uuid.uuid4()}.{ext}"
