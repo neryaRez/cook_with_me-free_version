@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { getRecipes } from '../services/api.js'
 import RecipeCard from '../components/RecipeCard.jsx'
+import { useAuth } from '../context/AuthContext.jsx'
 import Loader from '../components/Loader.jsx'
 import { ChefHatIcon, SparklesIcon } from '../components/icons.jsx'
 
@@ -11,6 +12,7 @@ const stats = [
 ]
 
 export default function HomePage() {
+  const { user } = useAuth()
   const [recipes, setRecipes] = useState([])
   const [isLoading, setIsLoading] = useState(true)
 
@@ -110,7 +112,7 @@ export default function HomePage() {
         ) : (
           <div className="mt-6 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
             {featured.map((recipe) => (
-              <RecipeCard key={recipe.id} recipe={recipe} />
+              <RecipeCard key={recipe.id} recipe={recipe} currentUser={user} />
             ))}
           </div>
         )}

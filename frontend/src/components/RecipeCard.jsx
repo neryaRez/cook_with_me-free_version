@@ -8,8 +8,33 @@ const difficultyStyles = {
   Hard: 'bg-rose-100 text-rose-600',
 }
 
-export default function RecipeCard({ recipe }) {
+function isFakeAvatar(url) {
+  return typeof url === 'string' && url.includes('i.pravatar.cc')
+}
+
+export default function RecipeCard({ recipe, currentUser }) {
   const totalTime = getTotalTime(recipe)
+  const isOwnRecipe =
+    recipe?.isMine === true ||
+    recipe?.ownerSub === currentUser?.sub ||
+    recipe?.author?.email === currentUser?.email ||
+    recipe?.author?.name === 'You' ||
+    recipe?.author?.name === currentUser?.username ||
+    recipe?.author?.name === currentUser?.displayName
+
+  const authorName =
+    isOwnRecipe
+      ? currentUser?.username || currentUser?.displayName || recipe?.author?.name || 'You'
+      : recipe?.author?.name || 'Cook'
+
+  const authorAvatar =
+    isOwnRecipe && currentUser?.avatarUrl
+      ? currentUser.avatarUrl
+      : !isFakeAvatar(recipe?.author?.avatar) && recipe?.author?.avatar
+        ? recipe.author.avatar
+        : null
+
+  const authorInitial = (authorName || 'C').charAt(0).toUpperCase()
 
   return (
     <Link
@@ -53,12 +78,18 @@ export default function RecipeCard({ recipe }) {
             </span>
           </div>
           <div className="flex items-center gap-2">
-            <img
-              src={recipe.author.avatar}
-              alt={recipe.author.name}
-              className="h-6 w-6 rounded-full border border-border-subtle/70 object-cover"
-            />
-            <span className="text-xs font-medium text-muted">{recipe.author.name}</span>
+            <div className="flex h-6 w-6 items-center justify-center overflow-hidden rounded-full border border-border-subtle/70 bg-ember/10 text-[10px] font-semibold text-ember">
+              {authorAvatar ? (
+                <img
+                  src={authorAvatar}
+                  alt={authorName}
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                authorInitial
+              )}
+            </div>
+            <span className="text-xs font-medium text-muted">{authorName}</span>
           </div>
         </div>
       </div>

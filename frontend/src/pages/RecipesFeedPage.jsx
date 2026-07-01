@@ -2,12 +2,14 @@ import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { getRecipes } from '../services/api.js'
 import RecipeCard from '../components/RecipeCard.jsx'
+import { useAuth } from '../context/AuthContext.jsx'
 import SearchBar from '../components/SearchBar.jsx'
 import CategoryFilter from '../components/CategoryFilter.jsx'
 import Loader from '../components/Loader.jsx'
 import { categories } from '../data/categories.js'
 
 export default function RecipesFeedPage() {
+  const { user } = useAuth()
   const [recipes, setRecipes] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -94,7 +96,7 @@ export default function RecipesFeedPage() {
             </p>
             <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
               {filteredRecipes.map((recipe) => (
-                <RecipeCard key={recipe.id} recipe={recipe} />
+                <RecipeCard key={recipe.id} recipe={recipe} currentUser={user} />
               ))}
             </div>
           </>
