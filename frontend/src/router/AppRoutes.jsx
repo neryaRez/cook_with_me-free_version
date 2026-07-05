@@ -21,6 +21,14 @@ export default function AppRoutes() {
       <Route path="/recipes" element={<RecipesFeedPage />} />
       <Route path="/recipes/:id" element={<RecipeDetailsPage />} />
       <Route
+        path="/recipes/:id/edit"
+        element={
+          <RequireAuth>
+            <CreateRecipePage editMode />
+          </RequireAuth>
+        }
+      />
+      <Route
         path="/create"
         element={
           <RequireAuth>

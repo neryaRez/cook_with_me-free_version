@@ -153,6 +153,14 @@ export default function RecipeDetailsPage() {
             <StarIcon className="h-4 w-4" />
             {recipe.rating.toFixed(1)}
           </div>
+          {isOwnRecipe ? (
+            <Link
+              to={`/recipes/${recipe.id}/edit`}
+              className="rounded-full bg-ember px-4 py-2 text-sm font-semibold text-cream transition-transform hover:scale-[1.03]"
+            >
+              Edit recipe
+            </Link>
+          ) : null}
         </div>
 
         <p className="mt-6 max-w-3xl text-base leading-relaxed text-muted">{recipe.description}</p>

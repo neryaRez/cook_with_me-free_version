@@ -1,6 +1,6 @@
-import { useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
-import { createRecipe, requestRecipeImageUploadUrl } from '../services/api.js'
+import { useEffect, useRef, useState } from 'react'
+import { Link, useNavigate, useParams } from 'react-router-dom'
+import { createRecipe, getRecipeById, requestRecipeImageUploadUrl, updateRecipe } from '../services/api.js'
 import { categories, tags as tagOptions } from '../data/categories.js'
 import { ChefHatIcon, PlusIcon, CloseIcon } from '../components/icons.jsx'
 
@@ -22,17 +22,66 @@ const initialFormState = {
   servings: '',
 }
 
-export default function CreateRecipePage() {
+export default function CreateRecipePage({ editMode = false }) {
   const imageInputRef = useRef(null)
+  const { id } = useParams()
+  const navigate = useNavigate()
   const [form, setForm] = useState(initialFormState)
   const [selectedTags, setSelectedTags] = useState([])
   const [ingredients, setIngredients] = useState([{ ...EMPTY_INGREDIENT }])
   const [steps, setSteps] = useState([''])
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isLoadingRecipe, setIsLoadingRecipe] = useState(editMode)
   const [createdRecipe, setCreatedRecipe] = useState(null)
   const [error, setError] = useState(null)
   const [recipeImageFile, setRecipeImageFile] = useState(null)
   const [recipeImagePreviewUrl, setRecipeImagePreviewUrl] = useState('')
+
+  useEffect(() => {
+    if (!editMode) return
+
+    let isMounted = true
+    setIsLoadingRecipe(true)
+    setError(null)
+
+    getRecipeById(id)
+      .then((recipe) => {
+        if (!isMounted) return
+
+        setForm({
+          title: recipe.title || '',
+          description: recipe.description || '',
+          image: recipe.imageKey ? '' : recipe.image || '',
+          category: recipe.category || categories[1],
+          cuisine: recipe.cuisine || '',
+          difficulty: recipe.difficulty || 'Easy',
+          prepTime: recipe.prepTime ?? '',
+          cookTime: recipe.cookTime ?? '',
+          servings: recipe.servings ?? '',
+        })
+
+        setSelectedTags(recipe.tags || [])
+        setIngredients(
+          recipe.ingredients?.length
+            ? recipe.ingredients
+            : [{ ...EMPTY_INGREDIENT }]
+        )
+        setSteps(recipe.steps?.length ? recipe.steps : [''])
+        setRecipeImagePreviewUrl(recipe.image || '')
+      })
+      .catch(() => {
+        if (isMounted) {
+          setError('Could not load this recipe for editing.')
+        }
+      })
+      .finally(() => {
+        if (isMounted) setIsLoadingRecipe(false)
+      })
+
+    return () => {
+      isMounted = false
+    }
+  }, [editMode, id])
 
   function handleRecipeImageChange(event) {
     const file = event.target.files?.[0]
@@ -125,7 +174,7 @@ export default function CreateRecipePage() {
         imageKey = key
       }
 
-      const newRecipe = await createRecipe({
+      const recipePayload = {
         title: form.title.trim(),
         description: form.description.trim(),
         image:
@@ -143,9 +192,18 @@ export default function CreateRecipePage() {
         tags: selectedTags,
         ingredients: ingredients.filter((ingredient) => ingredient.item.trim()),
         steps: steps.filter((step) => step.trim()),
-      })
+      }
 
-      setCreatedRecipe(newRecipe)
+      const savedRecipe = editMode
+        ? await updateRecipe(id, recipePayload)
+        : await createRecipe(recipePayload)
+
+      if (editMode) {
+        navigate(`/recipes/${savedRecipe.id}`, { replace: true })
+        return
+      }
+
+      setCreatedRecipe(savedRecipe)
     } catch {
       setError('Something went wrong while publishing your recipe. Please try again.')
     } finally {
@@ -161,6 +219,14 @@ export default function CreateRecipePage() {
     setRecipeImageFile(null)
     setRecipeImagePreviewUrl('')
     setCreatedRecipe(null)
+  }
+
+  if (editMode && isLoadingRecipe) {
+    return (
+      <div className="mx-auto max-w-3xl px-4 py-20 text-center text-muted">
+        Loading recipe...
+      </div>
+    )
   }
 
   if (createdRecipe) {
@@ -194,10 +260,11 @@ export default function CreateRecipePage() {
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-10 sm:px-6 lg:px-8">
-      <h1 className="font-display text-3xl font-bold text-cream sm:text-4xl">Create a Recipe</h1>
+      <h1 className="font-display text-3xl font-bold text-cream sm:text-4xl">{editMode ? 'Edit Recipe' : 'Create a Recipe'}</h1>
       <p className="mt-2 text-sm text-muted">
-        Share your dish with the Cook With Me community. Add ingredients, step-by-step
-        instructions, and a photo if you have one.
+        {editMode
+          ? 'Update your recipe details, instructions, and photo.'
+          : 'Share your dish with the Cook With Me community. Add ingredients, step-by-step instructions, and a photo if you have one.'}
       </p>
 
       <form onSubmit={handleSubmit} className="mt-8 space-y-8">
@@ -447,7 +514,7 @@ export default function CreateRecipePage() {
           disabled={isSubmitting}
           className="flex w-full items-center justify-center gap-2 rounded-full bg-ember px-6 py-3.5 text-sm font-semibold text-cream shadow-md shadow-ember/25 transition-transform hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {isSubmitting ? 'Publishing...' : 'Publish recipe'}
+          {isSubmitting ? (editMode ? 'Saving...' : 'Publishing...') : (editMode ? 'Save changes' : 'Publish recipe')}
         </button>
       </form>
     </div>

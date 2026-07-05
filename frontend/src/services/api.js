@@ -88,6 +88,27 @@ export async function createRecipe(data) {
   return newRecipe
 }
 
+export async function updateRecipe(recipeId, data) {
+  if (USE_REAL_API) {
+    return request(`/api/recipes/${recipeId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    })
+  }
+
+  await delay(MOCK_DELAY_MS)
+
+  const recipe = recipesStore.find((item) => item.id === recipeId)
+
+  if (!recipe) {
+    throw new Error(`Recipe with id "${recipeId}" not found`)
+  }
+
+  Object.assign(recipe, data)
+  return recipe
+}
+
+
 export async function createComment(recipeId, data) {
   if (USE_REAL_API) {
     return request(`/api/recipes/${recipeId}/comments`, {

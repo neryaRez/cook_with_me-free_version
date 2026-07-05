@@ -386,6 +386,97 @@ def create_recipe():
     return jsonify({"data": recipe}), 201
 
 
+@recipes_bp.route("/<recipe_id>", methods=["PATCH"])
+@require_auth
+def update_recipe(recipe_id):
+    payload = request.get_json(silent=True) or {}
+    owner_sub = g.current_user["sub"]
+
+    title = (payload.get("title") or "").strip()
+    description = (payload.get("description") or "").strip()
+
+    if not title or not description:
+        return jsonify({"error": "title and description are required"}), 400
+
+    image_key = (payload.get("imageKey") or "").strip()
+    if image_key and not image_key.startswith(f"recipes/{owner_sub}/drafts/"):
+        return jsonify({"error": "Invalid recipe image key"}), 400
+
+    if config.USE_DB:
+        session = get_session()
+        try:
+            recipe = session.get(Recipe, int(recipe_id))
+
+            if recipe is None:
+                return jsonify({"error": "Recipe not found"}), 404
+
+            if recipe.owner_sub != owner_sub:
+                return jsonify({"error": "You can only edit your own recipes"}), 403
+
+            recipe.title = title
+            recipe.description = description
+            recipe.category = payload.get("category", recipe.category)
+            recipe.cuisine = payload.get("cuisine", recipe.cuisine)
+            recipe.difficulty = payload.get("difficulty", recipe.difficulty)
+            recipe.prep_time = payload.get("prepTime", recipe.prep_time)
+            recipe.cook_time = payload.get("cookTime", recipe.cook_time)
+            recipe.servings = payload.get("servings", recipe.servings)
+            recipe.tags = payload.get("tags", recipe.tags or [])
+            recipe.ingredients = payload.get("ingredients", recipe.ingredients or [])
+            recipe.steps = payload.get("steps", recipe.steps or [])
+
+            if image_key:
+                recipe.image_key = image_key
+                recipe.image = ""
+            elif "image" in payload:
+                recipe.image = payload.get("image") or ""
+                recipe.image_key = None
+
+            session.commit()
+            session.refresh(recipe)
+
+            return jsonify({"data": _serialize_recipe(recipe)})
+        except ValueError:
+            session.rollback()
+            return jsonify({"error": "Invalid recipe id"}), 400
+        except Exception:
+            session.rollback()
+            raise
+        finally:
+            session.close()
+
+    recipe = _find_mock_recipe(recipe_id)
+
+    if recipe is None:
+        return jsonify({"error": "Recipe not found"}), 404
+
+    if recipe.get("ownerSub") != owner_sub:
+        return jsonify({"error": "You can only edit your own recipes"}), 403
+
+    recipe.update({
+        "title": title,
+        "description": description,
+        "category": payload.get("category", recipe.get("category")),
+        "cuisine": payload.get("cuisine", recipe.get("cuisine")),
+        "difficulty": payload.get("difficulty", recipe.get("difficulty")),
+        "prepTime": payload.get("prepTime", recipe.get("prepTime", 0)),
+        "cookTime": payload.get("cookTime", recipe.get("cookTime", 0)),
+        "servings": payload.get("servings", recipe.get("servings", 1)),
+        "tags": payload.get("tags", recipe.get("tags", [])),
+        "ingredients": payload.get("ingredients", recipe.get("ingredients", [])),
+        "steps": payload.get("steps", recipe.get("steps", [])),
+    })
+
+    if image_key:
+        recipe["imageKey"] = image_key
+        recipe["image"] = ""
+    elif "image" in payload:
+        recipe["image"] = payload.get("image") or ""
+        recipe["imageKey"] = None
+
+    return jsonify({"data": recipe})
+
+
 @recipes_bp.route("/<recipe_id>/comments", methods=["POST"])
 def add_comment(recipe_id):
     payload = request.get_json(silent=True) or {}
