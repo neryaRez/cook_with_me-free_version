@@ -313,6 +313,15 @@ def create_recipe():
     if not payload.get("title") or not payload.get("description"):
         return jsonify({"error": "title and description are required"}), 400
 
+    ingredients = payload.get("ingredients") or []
+    steps = payload.get("steps") or []
+
+    if not ingredients:
+        return jsonify({"error": "At least one ingredient is required"}), 400
+
+    if not steps:
+        return jsonify({"error": "At least one instruction step is required"}), 400
+
     # Ownership is derived exclusively from the verified JWT. Any
     # user_id/email/author the client puts in the body is ignored for
     # ownership purposes.
@@ -397,6 +406,15 @@ def update_recipe(recipe_id):
 
     if not title or not description:
         return jsonify({"error": "title and description are required"}), 400
+
+    ingredients = payload.get("ingredients") or []
+    steps = payload.get("steps") or []
+
+    if not ingredients:
+        return jsonify({"error": "At least one ingredient is required"}), 400
+
+    if not steps:
+        return jsonify({"error": "At least one instruction step is required"}), 400
 
     image_key = (payload.get("imageKey") or "").strip()
     if image_key and not image_key.startswith(f"recipes/{owner_sub}/drafts/"):

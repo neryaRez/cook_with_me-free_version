@@ -150,6 +150,19 @@ export default function CreateRecipePage({ editMode = false }) {
       return
     }
 
+    const validIngredients = ingredients.filter((ingredient) => ingredient.item.trim())
+    const validSteps = steps.filter((step) => step.trim())
+
+    if (validIngredients.length === 0) {
+      setError('Please add at least one ingredient.')
+      return
+    }
+
+    if (validSteps.length === 0) {
+      setError('Please add at least one instruction step.')
+      return
+    }
+
     setIsSubmitting(true)
 
     try {
@@ -190,8 +203,8 @@ export default function CreateRecipePage({ editMode = false }) {
         cookTime: Number(form.cookTime) || 0,
         servings: Number(form.servings) || 1,
         tags: selectedTags,
-        ingredients: ingredients.filter((ingredient) => ingredient.item.trim()),
-        steps: steps.filter((step) => step.trim()),
+        ingredients: validIngredients,
+        steps: validSteps,
       }
 
       const savedRecipe = editMode
