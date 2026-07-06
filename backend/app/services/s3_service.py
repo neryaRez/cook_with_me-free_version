@@ -92,3 +92,15 @@ def make_recipe_image_key_from_content_type(owner_sub, content_type):
     if not ext:
         raise ValueError(f"Content type '{content_type}' is not allowed")
     return f"recipes/{owner_sub}/drafts/{uuid.uuid4()}.{ext}"
+
+
+
+def delete_object(key):
+    """Delete a private media object when a key exists."""
+    if not key:
+        return
+
+    _client().delete_object(
+        Bucket=config.APP_MEDIA_BUCKET_NAME,
+        Key=key,
+    )

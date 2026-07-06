@@ -109,6 +109,28 @@ export async function updateRecipe(recipeId, data) {
 }
 
 
+export async function deleteRecipe(recipeId) {
+  if (USE_REAL_API) {
+    return request(`/api/recipes/${recipeId}`, {
+      method: 'DELETE',
+    })
+  }
+
+  await delay(MOCK_DELAY_MS)
+
+  const recipeIndex = recipesStore.findIndex(
+    (item) => String(item.id) === String(recipeId)
+  )
+
+  if (recipeIndex === -1) {
+    throw new Error(`Recipe with id "${recipeId}" not found`)
+  }
+
+  recipesStore.splice(recipeIndex, 1)
+  return null
+}
+
+
 export async function createComment(recipeId, data) {
   if (USE_REAL_API) {
     return request(`/api/recipes/${recipeId}/comments`, {
