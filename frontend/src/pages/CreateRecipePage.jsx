@@ -473,22 +473,30 @@ export default function CreateRecipePage({ editMode = false }) {
 
           <div className="space-y-3">
             {ingredients.map((ingredient, index) => (
-              <div key={index} className="flex items-center gap-2">
-                <input
-                  type="text"
-                  value={ingredient.amount}
-                  onChange={(event) => updateIngredient(index, 'amount', event.target.value)}
-                  placeholder="Amount"
-                  className={`${inputClass} w-28`}
-                />
+              <div
+                key={index}
+                className="grid grid-cols-1 items-center gap-2 sm:grid-cols-[minmax(0,1fr)_10rem_auto]"
+              >
                 <input
                   type="text"
                   value={ingredient.item}
                   onChange={(event) => updateIngredient(index, 'item', event.target.value)}
-                  placeholder="Ingredient"
-                  className={`${inputClass} flex-1`}
+                  placeholder="Ingredient, e.g. potatoes"
+                  aria-label={`Ingredient ${index + 1}`}
+                  className={inputClass}
                 />
-                <RemoveButton onClick={() => removeIngredient(index)} disabled={ingredients.length === 1} />
+                <input
+                  type="text"
+                  value={ingredient.amount}
+                  onChange={(event) => updateIngredient(index, 'amount', event.target.value)}
+                  placeholder="Amount, e.g. 500 g"
+                  aria-label={`Amount for ingredient ${index + 1}`}
+                  className={inputClass}
+                />
+                <RemoveButton
+                  onClick={() => removeIngredient(index)}
+                  disabled={ingredients.length === 1}
+                />
               </div>
             ))}
           </div>
