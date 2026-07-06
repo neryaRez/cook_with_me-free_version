@@ -151,7 +151,12 @@ export default function CreateRecipePage({ editMode = false }) {
     }
 
     const validIngredients = ingredients.filter((ingredient) => ingredient.item.trim())
-    const validSteps = steps.filter((step) => step.trim())
+    const validSteps = steps.flatMap((step) =>
+      step
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter(Boolean)
+    )
 
     if (validIngredients.length === 0) {
       setError('Please add at least one ingredient.')
@@ -520,7 +525,7 @@ export default function CreateRecipePage({ editMode = false }) {
                 <textarea
                   value={step}
                   onChange={(event) => updateStep(index, event.target.value)}
-                  placeholder={`Describe step ${index + 1}...`}
+                  placeholder={`Describe step ${index + 1}... Use a new line for each instruction.`}
                   rows={2}
                   className={`${inputClass} flex-1 resize-none`}
                 />
