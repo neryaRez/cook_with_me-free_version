@@ -511,7 +511,7 @@ export default function CreateRecipePage({ editMode = false }) {
             </button>
           </div>
 
-          <div className="space-y-3">
+          <div className="space-y-5">
             {steps.map((step, index) => (
               <div key={index} className="flex items-start gap-2">
                 <span className="mt-2.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-ember/15 text-xs font-bold text-ember-light">
