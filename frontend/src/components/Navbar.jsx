@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom'
-import { ChefHatIcon, PlusIcon, SparklesIcon, BookmarkIcon } from './icons.jsx'
+import { ChefHatIcon, PlusIcon } from './icons.jsx'
 import { useAuth } from '../context/AuthContext.jsx'
 import UserMenu from './UserMenu.jsx'
 
@@ -44,28 +44,6 @@ export default function Navbar() {
         </nav>
 
         <div className="flex items-center gap-2">
-          {user && (
-            <NavLink
-              to="/my-recipes"
-              className={({ isActive }) =>
-                `hidden items-center gap-1.5 rounded-full border px-3.5 py-2 text-sm font-medium transition-colors sm:flex ${
-                  isActive
-                    ? 'border-ember/40 text-cream'
-                    : 'border-border-subtle/70 text-muted hover:border-ember/40 hover:text-cream'
-                }`
-              }
-            >
-              <BookmarkIcon className="h-4 w-4 text-ember-light" />
-              My Recipes
-            </NavLink>
-          )}
-          <NavLink
-            to="/robo-chef"
-            className="hidden items-center gap-1.5 rounded-full border border-border-subtle/70 px-3.5 py-2 text-sm font-medium text-muted transition-colors hover:border-ember/40 hover:text-cream sm:flex md:hidden"
-          >
-            <SparklesIcon className="h-4 w-4 text-ember-light" />
-            Robo Chef
-          </NavLink>
           <NavLink
             to={user ? '/create' : '/login'}
             className="flex items-center gap-1.5 rounded-full bg-ember px-4 py-2 text-sm font-semibold text-cream shadow-md shadow-ember/25 transition-transform hover:scale-[1.03] active:scale-[0.98]"
