@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
-import { deleteRecipe, getRecipeById } from '../services/api.js'
+import { Link, useParams } from 'react-router-dom'
+import { getRecipeById } from '../services/api.js'
 import { useAuth } from '../context/AuthContext.jsx'
 import Loader from '../components/Loader.jsx'
 import CommentSection from '../components/CommentSection.jsx'
@@ -20,13 +20,10 @@ function isFakeAvatar(url) {
 export default function RecipeDetailsPage() {
   const { user } = useAuth()
   const { id } = useParams()
-  const navigate = useNavigate()
   const [recipe, setRecipe] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState(null)
   const [checkedIngredients, setCheckedIngredients] = useState([])
-  const [isDeleting, setIsDeleting] = useState(false)
-  const [deleteError, setDeleteError] = useState(null)
 
   useEffect(() => {
     let isMounted = true
@@ -53,27 +50,6 @@ export default function RecipeDetailsPage() {
     setCheckedIngredients((prev) =>
       prev.includes(item) ? prev.filter((entry) => entry !== item) : [...prev, item]
     )
-  }
-
-  async function handleDeleteRecipe() {
-    if (!recipe || isDeleting) return
-
-    const confirmed = window.confirm(
-      `Delete "${recipe.title}" permanently? This action cannot be undone.`
-    )
-
-    if (!confirmed) return
-
-    setIsDeleting(true)
-    setDeleteError(null)
-
-    try {
-      await deleteRecipe(recipe.id)
-      navigate('/my-recipes', { replace: true })
-    } catch {
-      setDeleteError('Could not delete this recipe. Please try again.')
-      setIsDeleting(false)
-    }
   }
 
   function handleCommentAdded(newComment) {
@@ -177,34 +153,9 @@ export default function RecipeDetailsPage() {
             <StarIcon className="h-4 w-4" />
             {recipe.rating.toFixed(1)}
           </div>
-          {isOwnRecipe ? (
-            <>
-              <Link
-                to={`/recipes/${recipe.id}/edit`}
-                className="rounded-full bg-ember px-4 py-2 text-sm font-semibold text-cream transition-transform hover:scale-[1.03]"
-              >
-                Edit recipe
-              </Link>
-
-              <button
-                type="button"
-                onClick={handleDeleteRecipe}
-                disabled={isDeleting}
-                className="rounded-full border border-rose-300 bg-rose-50 px-4 py-2 text-sm font-semibold text-rose-700 transition-colors hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {isDeleting ? 'Deleting...' : 'Delete recipe'}
-              </button>
-            </>
-          ) : null}
         </div>
 
         <p className="mt-6 max-w-3xl text-base leading-relaxed text-muted">{recipe.description}</p>
-
-        {deleteError && (
-          <p className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-            {deleteError}
-          </p>
-        )}
 
         <div className="mt-4 flex flex-wrap gap-2">
           {recipe.tags.map((tag) => (
