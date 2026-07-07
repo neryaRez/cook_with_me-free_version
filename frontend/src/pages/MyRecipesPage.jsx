@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { getMyRecipes } from '../services/api.js'
+import { deleteRecipe, getMyRecipes } from '../services/api.js'
 import RecipeCard from '../components/RecipeCard.jsx'
 import { useAuth } from '../context/AuthContext.jsx'
 import Loader from '../components/Loader.jsx'
@@ -11,6 +11,7 @@ export default function MyRecipesPage() {
   const [recipes, setRecipes] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [deletingRecipeId, setDeletingRecipeId] = useState(null)
 
   useEffect(() => {
     let isMounted = true
@@ -29,6 +30,36 @@ export default function MyRecipesPage() {
       isMounted = false
     }
   }, [])
+
+  async function handleDeleteRecipe(recipe) {
+    if (
+      deletingRecipeId ||
+      !user?.sub ||
+      recipe?.ownerSub !== user.sub
+    ) {
+      return
+    }
+
+    const confirmed = window.confirm(
+      `Delete "${recipe.title}" permanently? This action cannot be undone.`
+    )
+
+    if (!confirmed) return
+
+    setDeletingRecipeId(recipe.id)
+    setError(null)
+
+    try {
+      await deleteRecipe(recipe.id)
+      setRecipes((current) =>
+        current.filter((item) => String(item.id) !== String(recipe.id))
+      )
+    } catch {
+      setError('Could not delete the recipe. Please try again.')
+    } finally {
+      setDeletingRecipeId(null)
+    }
+  }
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
@@ -69,9 +100,49 @@ export default function MyRecipesPage() {
 
         {!isLoading && !error && recipes.length > 0 && (
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {recipes.map((recipe) => (
-              <RecipeCard key={recipe.id} recipe={recipe} currentUser={user} />
-            ))}
+            {recipes.map((recipe) => {
+              const isOwner =
+                Boolean(user?.sub) &&
+                recipe?.ownerSub === user.sub
+
+              return (
+                <div key={recipe.id} className="relative">
+                  <RecipeCard recipe={recipe} currentUser={user} />
+
+                  {isOwner ? (
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteRecipe(recipe)}
+                      disabled={deletingRecipeId === recipe.id}
+                      aria-label={`Delete ${recipe.title}`}
+                      title="Delete recipe"
+                      className="absolute bottom-4 right-4 z-10 flex h-9 w-9 items-center justify-center rounded-full border border-rose-200 bg-white/95 text-rose-600 shadow-md backdrop-blur-sm transition hover:scale-105 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {deletingRecipeId === recipe.id ? (
+                        <span className="text-xs font-semibold">...</span>
+                      ) : (
+                        <svg
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="1.8"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          className="h-4 w-4"
+                          aria-hidden="true"
+                        >
+                          <path d="M3 6h18" />
+                          <path d="M8 6V4h8v2" />
+                          <path d="M19 6l-1 14H6L5 6" />
+                          <path d="M10 11v5" />
+                          <path d="M14 11v5" />
+                        </svg>
+                      )}
+                    </button>
+                  ) : null}
+                </div>
+              )
+            })}
           </div>
         )}
       </div>
