@@ -5,9 +5,10 @@ import Field, { inputClass } from '../../components/auth/Field.jsx'
 import { useAuth } from '../../context/AuthContext.jsx'
 import { CameraIcon } from '../../components/icons.jsx'
 import { requestAvatarUploadUrl } from '../../services/api.js'
+import { optimizeAvatarImage } from '../../utils/image.js'
 
 const ALLOWED_AVATAR_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp'])
-const MAX_AVATAR_BYTES = 5 * 1024 * 1024 // 5 MB
+const MAX_AVATAR_SOURCE_BYTES = 15 * 1024 * 1024 // optimized before upload
 
 export default function SetupProfilePage() {
   const navigate = useNavigate()
@@ -35,7 +36,7 @@ export default function SetupProfilePage() {
     return <Navigate to="/verify" replace />
   }
 
-  function handleAvatarChange(event) {
+  async function handleAvatarChange(event) {
     const file = event.target.files?.[0]
     if (!file) return
 
@@ -43,14 +44,31 @@ export default function SetupProfilePage() {
       setError('Please upload a JPEG, PNG, or WebP image.')
       return
     }
-    if (file.size > MAX_AVATAR_BYTES) {
-      setError('Image must be 5 MB or smaller.')
+
+    if (file.size > MAX_AVATAR_SOURCE_BYTES) {
+      setError('Image must be 15 MB or smaller.')
       return
     }
 
     setError(null)
-    setAvatarFile(file)
-    setAvatarPreviewUrl(URL.createObjectURL(file))
+    setUploadStatus('Optimizing photo...')
+
+    try {
+      const optimizedFile = await optimizeAvatarImage(file)
+
+      setAvatarFile(optimizedFile)
+      setAvatarPreviewUrl((currentUrl) => {
+        if (currentUrl?.startsWith('blob:')) {
+          URL.revokeObjectURL(currentUrl)
+        }
+        return URL.createObjectURL(optimizedFile)
+      })
+    } catch {
+      setError('Could not process this image. Please choose another photo.')
+    } finally {
+      setUploadStatus(null)
+      event.target.value = ''
+    }
   }
 
   async function handleSubmit(event) {
