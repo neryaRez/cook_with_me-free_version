@@ -106,21 +106,17 @@ export default function MyRecipesPage() {
                 recipe?.ownerSub === user.sub
 
               return (
-                <div key={recipe.id} className="relative">
+                <div key={recipe.id}>
                   <RecipeCard recipe={recipe} currentUser={user} />
 
                   {isOwner ? (
-                    <button
-                      type="button"
-                      onClick={() => handleDeleteRecipe(recipe)}
-                      disabled={deletingRecipeId === recipe.id}
-                      aria-label={`Delete ${recipe.title}`}
-                      title="Delete recipe"
-                      className="absolute bottom-4 right-4 z-10 flex h-9 w-9 items-center justify-center rounded-full border border-rose-200 bg-white/95 text-rose-600 shadow-md backdrop-blur-sm transition hover:scale-105 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      {deletingRecipeId === recipe.id ? (
-                        <span className="text-xs font-semibold">...</span>
-                      ) : (
+                    <div className="mt-3 flex items-center justify-end gap-2">
+                      <Link
+                        to={`/recipes/${recipe.id}/edit`}
+                        aria-label={`Edit ${recipe.title}`}
+                        title="Edit recipe"
+                        className="inline-flex h-9 items-center gap-2 rounded-full border border-border-subtle/70 bg-card px-3 text-xs font-semibold text-cream shadow-sm transition hover:border-ember/40 hover:text-ember"
+                      >
                         <svg
                           viewBox="0 0 24 24"
                           fill="none"
@@ -131,14 +127,45 @@ export default function MyRecipesPage() {
                           className="h-4 w-4"
                           aria-hidden="true"
                         >
-                          <path d="M3 6h18" />
-                          <path d="M8 6V4h8v2" />
-                          <path d="M19 6l-1 14H6L5 6" />
-                          <path d="M10 11v5" />
-                          <path d="M14 11v5" />
+                          <path d="M12 20h9" />
+                          <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z" />
                         </svg>
-                      )}
-                    </button>
+                        Edit
+                      </Link>
+
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteRecipe(recipe)}
+                        disabled={deletingRecipeId === recipe.id}
+                        aria-label={`Delete ${recipe.title}`}
+                        title="Delete recipe"
+                        className="inline-flex h-9 items-center gap-2 rounded-full border border-rose-200 bg-rose-50 px-3 text-xs font-semibold text-rose-700 shadow-sm transition hover:border-rose-300 hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {deletingRecipeId === recipe.id ? (
+                          <span>Deleting...</span>
+                        ) : (
+                          <>
+                            <svg
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="1.8"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              className="h-4 w-4"
+                              aria-hidden="true"
+                            >
+                              <path d="M3 6h18" />
+                              <path d="M8 6V4h8v2" />
+                              <path d="M19 6l-1 14H6L5 6" />
+                              <path d="M10 11v5" />
+                              <path d="M14 11v5" />
+                            </svg>
+                            Delete
+                          </>
+                        )}
+                      </button>
+                    </div>
                   ) : null}
                 </div>
               )
