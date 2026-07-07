@@ -56,6 +56,23 @@ export default function RecipeDetailsPage() {
     setRecipe((prev) => (prev ? { ...prev, comments: [...prev.comments, newComment] } : prev))
   }
 
+  function handleCommentUpdated(updatedComment) {
+    setRecipe((prev) =>
+      prev
+        ? {
+            ...prev,
+            comments: prev.comments.map((c) => (c.id === updatedComment.id ? updatedComment : c)),
+          }
+        : prev
+    )
+  }
+
+  function handleCommentDeleted(commentId) {
+    setRecipe((prev) =>
+      prev ? { ...prev, comments: prev.comments.filter((c) => c.id !== commentId) } : prev
+    )
+  }
+
   if (isLoading) {
     return <Loader label="Loading recipe..." />
   }
@@ -217,6 +234,8 @@ export default function RecipeDetailsPage() {
                 recipeId={recipe.id}
                 comments={recipe.comments}
                 onCommentAdded={handleCommentAdded}
+                onCommentUpdated={handleCommentUpdated}
+                onCommentDeleted={handleCommentDeleted}
               />
             </div>
           </div>

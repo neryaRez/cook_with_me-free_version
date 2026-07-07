@@ -7,14 +7,15 @@ database is configured later, these handlers can be switched to use
 db.get_session() and real models instead of _RECIPES.
 """
 
-from datetime import date
+import uuid
+from datetime import date, datetime
 
 from flask import Blueprint, g, jsonify, request
 
 from .. import config
 from ..auth import require_auth
 from ..db import get_session
-from ..models import Recipe
+from ..models import Recipe, User
 from ..services import s3_service
 
 recipes_bp = Blueprint("recipes", __name__, url_prefix="/api/recipes")
@@ -496,6 +497,7 @@ def update_recipe(recipe_id):
 
 
 @recipes_bp.route("/<recipe_id>/comments", methods=["POST"])
+@require_auth
 def add_comment(recipe_id):
     payload = request.get_json(silent=True) or {}
     text = (payload.get("text") or "").strip()
@@ -503,12 +505,11 @@ def add_comment(recipe_id):
     if not text:
         return jsonify({"error": "text is required"}), 400
 
-    comment = {
-        "id": f"c{date.today().isoformat()}-{recipe_id}",
-        "author": payload.get("author", "Guest"),
-        "text": text,
-        "date": date.today().isoformat(),
-    }
+    author_sub = g.current_user["sub"]
+    owner_email = g.current_user.get("email") or ""
+    author_name = owner_email.split("@")[0] if owner_email else "Chef"
+    now = datetime.utcnow().isoformat() + "Z"
+    comment_id = str(uuid.uuid4())
 
     if config.USE_DB:
         session = get_session()
@@ -517,10 +518,21 @@ def add_comment(recipe_id):
             if recipe is None:
                 return jsonify({"error": "Recipe not found"}), 404
 
-            comments = list(recipe.comments or [])
-            comment["id"] = f"c{len(comments) + 1}"
-            comments.append(comment)
+            user_record = session.query(User).filter_by(cognito_sub=author_sub).first()
+            if user_record:
+                author_name = user_record.display_name or user_record.username or author_name
 
+            comment = {
+                "id": comment_id,
+                "authorSub": author_sub,
+                "authorName": author_name,
+                "text": text,
+                "createdAt": now,
+                "updatedAt": now,
+            }
+
+            comments = list(recipe.comments or [])
+            comments.append(comment)
             recipe.comments = comments
             session.commit()
 
@@ -535,10 +547,116 @@ def add_comment(recipe_id):
     if recipe is None:
         return jsonify({"error": "Recipe not found"}), 404
 
-    comment["id"] = f"c{len(recipe['comments']) + 1}"
+    comment = {
+        "id": comment_id,
+        "authorSub": author_sub,
+        "authorName": author_name,
+        "text": text,
+        "createdAt": now,
+        "updatedAt": now,
+    }
     recipe["comments"].append(comment)
-
     return jsonify({"data": comment}), 201
+
+
+@recipes_bp.route("/<recipe_id>/comments/<comment_id>", methods=["PATCH"])
+@require_auth
+def update_comment(recipe_id, comment_id):
+    payload = request.get_json(silent=True) or {}
+    text = (payload.get("text") or "").strip()
+
+    if not text:
+        return jsonify({"error": "text is required"}), 400
+
+    author_sub = g.current_user["sub"]
+    now = datetime.utcnow().isoformat() + "Z"
+
+    if config.USE_DB:
+        session = get_session()
+        try:
+            recipe = session.get(Recipe, int(recipe_id))
+            if recipe is None:
+                return jsonify({"error": "Recipe not found"}), 404
+
+            comments = list(recipe.comments or [])
+            comment = next((c for c in comments if c.get("id") == comment_id), None)
+            if comment is None:
+                return jsonify({"error": "Comment not found"}), 404
+
+            if comment.get("authorSub") != author_sub:
+                return jsonify({"error": "You do not own this comment"}), 403
+
+            comment["text"] = text
+            comment["updatedAt"] = now
+            recipe.comments = comments
+            session.commit()
+
+            return jsonify({"data": comment})
+        except Exception:
+            session.rollback()
+            raise
+        finally:
+            session.close()
+
+    recipe = _find_mock_recipe(recipe_id)
+    if recipe is None:
+        return jsonify({"error": "Recipe not found"}), 404
+
+    comment = next((c for c in recipe["comments"] if c.get("id") == comment_id), None)
+    if comment is None:
+        return jsonify({"error": "Comment not found"}), 404
+
+    if comment.get("authorSub") != author_sub:
+        return jsonify({"error": "You do not own this comment"}), 403
+
+    comment["text"] = text
+    comment["updatedAt"] = now
+    return jsonify({"data": comment})
+
+
+@recipes_bp.route("/<recipe_id>/comments/<comment_id>", methods=["DELETE"])
+@require_auth
+def delete_comment(recipe_id, comment_id):
+    author_sub = g.current_user["sub"]
+
+    if config.USE_DB:
+        session = get_session()
+        try:
+            recipe = session.get(Recipe, int(recipe_id))
+            if recipe is None:
+                return jsonify({"error": "Recipe not found"}), 404
+
+            comments = list(recipe.comments or [])
+            comment = next((c for c in comments if c.get("id") == comment_id), None)
+            if comment is None:
+                return jsonify({"error": "Comment not found"}), 404
+
+            if comment.get("authorSub") != author_sub:
+                return jsonify({"error": "You do not own this comment"}), 403
+
+            recipe.comments = [c for c in comments if c.get("id") != comment_id]
+            session.commit()
+
+            return jsonify({"data": {"deleted": True, "id": comment_id}})
+        except Exception:
+            session.rollback()
+            raise
+        finally:
+            session.close()
+
+    recipe = _find_mock_recipe(recipe_id)
+    if recipe is None:
+        return jsonify({"error": "Recipe not found"}), 404
+
+    comment = next((c for c in recipe["comments"] if c.get("id") == comment_id), None)
+    if comment is None:
+        return jsonify({"error": "Comment not found"}), 404
+
+    if comment.get("authorSub") != author_sub:
+        return jsonify({"error": "You do not own this comment"}), 403
+
+    recipe["comments"] = [c for c in recipe["comments"] if c.get("id") != comment_id]
+    return jsonify({"data": {"deleted": True, "id": comment_id}})
 
 @recipes_bp.route("/<recipe_id>", methods=["DELETE"])
 @require_auth

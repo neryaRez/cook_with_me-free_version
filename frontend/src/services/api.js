@@ -149,13 +149,48 @@ export async function createComment(recipeId, data) {
 
   const newComment = {
     id: generateId(),
-    author: data.author ?? 'You',
+    authorName: data.authorName ?? 'You',
     text: data.text,
-    date: data.date ?? new Date().toISOString().slice(0, 10),
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
   }
 
   recipe.comments.push(newComment)
   return newComment
+}
+
+export async function updateComment(recipeId, commentId, payload) {
+  if (USE_REAL_API) {
+    return request(`/api/recipes/${recipeId}/comments/${commentId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    })
+  }
+
+  await delay(MOCK_DELAY_MS)
+
+  const recipe = recipesStore.find((item) => item.id === recipeId)
+  if (!recipe) throw new Error(`Recipe with id "${recipeId}" not found`)
+  const comment = recipe.comments.find((c) => c.id === commentId)
+  if (!comment) throw new Error('Comment not found')
+  comment.text = payload.text
+  comment.updatedAt = new Date().toISOString()
+  return comment
+}
+
+export async function deleteComment(recipeId, commentId) {
+  if (USE_REAL_API) {
+    return request(`/api/recipes/${recipeId}/comments/${commentId}`, {
+      method: 'DELETE',
+    })
+  }
+
+  await delay(MOCK_DELAY_MS)
+
+  const recipe = recipesStore.find((item) => item.id === recipeId)
+  if (!recipe) throw new Error(`Recipe with id "${recipeId}" not found`)
+  recipe.comments = recipe.comments.filter((c) => c.id !== commentId)
+  return null
 }
 
 export async function askRoboChef(data) {
