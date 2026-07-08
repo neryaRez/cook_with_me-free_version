@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import ChatInterface from '../components/ChatInterface.jsx'
 import ConversationList from '../components/ConversationList.jsx'
-import { ChefHatIcon, SparklesIcon, ChevronDownIcon } from '../components/icons.jsx'
+import { ChefHatIcon, SparklesIcon, ChevronDownIcon, PlusIcon } from '../components/icons.jsx'
 import {
   USE_REAL_API,
   getConversations,
@@ -12,6 +12,23 @@ import {
 
 function sortByUpdatedAtDesc(conversations) {
   return [...conversations].sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))
+}
+
+// A standalone primary action, deliberately separate from the conversation
+// list panel below it so it reads as its own action rather than a control
+// embedded inside the picker.
+function NewConversationButton({ label, onClick, isCreating }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={isCreating}
+      className="flex w-full items-center justify-center gap-1.5 rounded-full bg-ember px-4 py-2.5 text-sm font-semibold text-cream shadow-lg shadow-ember/20 transition-transform hover:scale-[1.02] disabled:cursor-not-allowed disabled:opacity-40"
+    >
+      <PlusIcon className="h-4 w-4" />
+      {isCreating ? 'Creating...' : label}
+    </button>
+  )
 }
 
 export default function RoboChefPage() {
@@ -116,35 +133,37 @@ export default function RoboChefPage() {
               />
             </button>
             {isDrawerOpen && (
-              <div className="mt-2 h-72 overflow-hidden rounded-2xl border border-border-subtle/70 bg-card shadow-xl shadow-black/20">
-                <ConversationList
-                  conversations={conversations}
-                  activeId={activeId}
-                  isLoading={isLoadingList}
-                  error={listError}
-                  isCreating={isCreating}
-                  onSelect={handleSelect}
-                  onCreate={handleCreate}
-                  onRename={handleRename}
-                  onDelete={handleDelete}
-                />
+              <div className="mt-2 space-y-2">
+                <NewConversationButton label="New chat" onClick={handleCreate} isCreating={isCreating} />
+                <div className="h-64 overflow-hidden rounded-2xl border border-border-subtle/70 bg-card shadow-xl shadow-black/20">
+                  <ConversationList
+                    conversations={conversations}
+                    activeId={activeId}
+                    isLoading={isLoadingList}
+                    error={listError}
+                    onSelect={handleSelect}
+                    onRename={handleRename}
+                    onDelete={handleDelete}
+                  />
+                </div>
               </div>
             )}
           </div>
 
           <div className="mt-4 grid gap-4 lg:mt-8 lg:grid-cols-[18rem_1fr]">
-            <div className="hidden overflow-hidden rounded-3xl border border-border-subtle/70 bg-card shadow-xl shadow-black/20 lg:block lg:h-[36rem]">
-              <ConversationList
-                conversations={conversations}
-                activeId={activeId}
-                isLoading={isLoadingList}
-                error={listError}
-                isCreating={isCreating}
-                onSelect={handleSelect}
-                onCreate={handleCreate}
-                onRename={handleRename}
-                onDelete={handleDelete}
-              />
+            <div className="hidden lg:flex lg:h-[36rem] lg:flex-col lg:gap-3">
+              <NewConversationButton label="New conversation" onClick={handleCreate} isCreating={isCreating} />
+              <div className="flex-1 overflow-hidden rounded-3xl border border-border-subtle/70 bg-card shadow-xl shadow-black/20">
+                <ConversationList
+                  conversations={conversations}
+                  activeId={activeId}
+                  isLoading={isLoadingList}
+                  error={listError}
+                  onSelect={handleSelect}
+                  onRename={handleRename}
+                  onDelete={handleDelete}
+                />
+              </div>
             </div>
 
             <div className="h-[36rem] overflow-hidden rounded-3xl border border-border-subtle/70 bg-card shadow-xl shadow-black/20">

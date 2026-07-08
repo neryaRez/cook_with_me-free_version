@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { PlusIcon, PencilIcon, TrashIcon, ChefHatIcon } from './icons.jsx'
+import { PencilIcon, TrashIcon, ChefHatIcon } from './icons.jsx'
 import { formatRelativeTime } from '../utils/time.js'
 import Loader from './Loader.jsx'
 
@@ -8,9 +8,7 @@ export default function ConversationList({
   activeId,
   isLoading,
   error,
-  isCreating,
   onSelect,
-  onCreate,
   onRename,
   onDelete,
 }) {
@@ -55,17 +53,9 @@ export default function ConversationList({
 
   return (
     <div className="flex h-full flex-col">
-      <div className="border-b border-border-subtle/70 p-3">
-        <button
-          type="button"
-          onClick={onCreate}
-          disabled={isCreating}
-          className="flex w-full items-center justify-center gap-1.5 rounded-full bg-ember px-4 py-2 text-sm font-semibold text-cream transition-transform hover:scale-[1.02] disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          <PlusIcon className="h-4 w-4" />
-          {isCreating ? 'Creating...' : 'New conversation'}
-        </button>
-      </div>
+      <p className="border-b border-border-subtle/70 px-3 py-2.5 text-xs text-muted">
+        Pick up where you left off.
+      </p>
 
       <div className="flex-1 overflow-y-auto p-2">
         {isLoading && (
