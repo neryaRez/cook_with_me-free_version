@@ -219,6 +219,81 @@ export async function askRoboChef(data) {
   }
 }
 
+export async function getConversations() {
+  if (!USE_REAL_API) return []
+  return request('/api/ai/conversations')
+}
+
+export async function createConversation() {
+  if (!USE_REAL_API) throw new Error('Conversations are not available in mock mode')
+  return request('/api/ai/conversations', { method: 'POST' })
+}
+
+export async function getConversation(conversationId) {
+  if (!USE_REAL_API) throw new Error('Conversations are not available in mock mode')
+  return request(`/api/ai/conversations/${conversationId}`)
+}
+
+export async function renameConversation(conversationId, title) {
+  if (!USE_REAL_API) throw new Error('Conversations are not available in mock mode')
+  return request(`/api/ai/conversations/${conversationId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ title }),
+  })
+}
+
+export async function deleteConversation(conversationId) {
+  if (!USE_REAL_API) throw new Error('Conversations are not available in mock mode')
+  return request(`/api/ai/conversations/${conversationId}`, { method: 'DELETE' })
+}
+
+export async function sendConversationMessage(conversationId, message) {
+  if (!USE_REAL_API) throw new Error('Conversations are not available in mock mode')
+
+  const idToken = getIdToken()
+  const headers = { 'Content-Type': 'application/json' }
+  if (idToken) headers.Authorization = `Bearer ${idToken}`
+
+  const response = await fetch(`${API_BASE_URL}/api/ai/conversations/${conversationId}/messages`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ message }),
+  })
+
+  let json = null
+  try {
+    json = await response.json()
+  } catch {
+    json = null
+  }
+
+  if (!response.ok) {
+    // On an AI failure the backend still returns the persisted user message
+    // (see backend/app/routes/ai_conversations.py::send_message) so the
+    // caller can render it as sent even though the reply failed.
+    const error = new Error(json?.error || `Request failed: ${response.status} ${response.statusText}`)
+    error.data = json?.data ?? null
+    throw error
+  }
+
+  return json?.data ?? json
+}
+
+export async function retryConversationMessage(conversationId) {
+  if (!USE_REAL_API) throw new Error('Conversations are not available in mock mode')
+  return request(`/api/ai/conversations/${conversationId}/messages/retry`, { method: 'POST' })
+}
+
+export async function getMemory() {
+  if (!USE_REAL_API) return { memory: {} }
+  return request('/api/ai/memory')
+}
+
+export async function updateMemory(memory) {
+  if (!USE_REAL_API) throw new Error('Memory is not available in mock mode')
+  return request('/api/ai/memory', { method: 'PATCH', body: JSON.stringify({ memory }) })
+}
+
 export async function getMyRecipes() {
   if (!USE_REAL_API) {
     await delay(MOCK_DELAY_MS)

@@ -1,10 +1,88 @@
+import { useCallback, useEffect, useState } from 'react'
 import ChatInterface from '../components/ChatInterface.jsx'
-import { ChefHatIcon, SparklesIcon } from '../components/icons.jsx'
-import { USE_REAL_API } from '../services/api.js'
+import ConversationList from '../components/ConversationList.jsx'
+import { ChefHatIcon, SparklesIcon, ChevronDownIcon } from '../components/icons.jsx'
+import {
+  USE_REAL_API,
+  getConversations,
+  createConversation,
+  renameConversation,
+  deleteConversation,
+} from '../services/api.js'
+
+function sortByUpdatedAtDesc(conversations) {
+  return [...conversations].sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))
+}
 
 export default function RoboChefPage() {
+  const [conversations, setConversations] = useState([])
+  const [activeId, setActiveId] = useState(null)
+  const [isLoadingList, setIsLoadingList] = useState(USE_REAL_API)
+  const [listError, setListError] = useState(null)
+  const [isCreating, setIsCreating] = useState(false)
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false)
+
+  const loadConversations = useCallback(() => {
+    if (!USE_REAL_API) return
+
+    setIsLoadingList(true)
+    setListError(null)
+    getConversations()
+      .then((data) => {
+        setConversations(data)
+        setActiveId((current) => current ?? data[0]?.id ?? null)
+      })
+      .catch(() => setListError('Could not load your conversations right now.'))
+      .finally(() => setIsLoadingList(false))
+  }, [])
+
+  useEffect(() => {
+    loadConversations()
+  }, [loadConversations])
+
+  function upsertConversation(updated) {
+    setConversations((prev) => sortByUpdatedAtDesc([updated, ...prev.filter((c) => c.id !== updated.id)]))
+  }
+
+  async function handleCreate() {
+    if (isCreating) return
+    setIsCreating(true)
+    setListError(null)
+    try {
+      const conversation = await createConversation()
+      setConversations((prev) => [conversation, ...prev])
+      setActiveId(conversation.id)
+      setIsDrawerOpen(false)
+    } catch {
+      setListError('Could not start a new conversation. Please try again.')
+    } finally {
+      setIsCreating(false)
+    }
+  }
+
+  function handleSelect(id) {
+    setActiveId(id)
+    setIsDrawerOpen(false)
+  }
+
+  async function handleRename(id, title) {
+    const updated = await renameConversation(id, title)
+    upsertConversation(updated)
+  }
+
+  async function handleDelete(id) {
+    await deleteConversation(id)
+    setConversations((prev) => {
+      const remaining = prev.filter((c) => c.id !== id)
+      if (activeId === id) setActiveId(remaining[0]?.id ?? null)
+      return remaining
+    })
+  }
+
+  const activeConversation = conversations.find((c) => c.id === activeId) || null
+
   return (
-    <div className="mx-auto max-w-4xl px-4 py-10 sm:px-6 lg:px-8">
+    <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6 lg:px-8">
       <div className="text-center">
         <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-ember/15 text-ember-light">
           <ChefHatIcon className="h-7 w-7" />
@@ -20,9 +98,72 @@ export default function RoboChefPage() {
         </span>
       </div>
 
-      <div className="mt-8 h-[36rem] overflow-hidden rounded-3xl border border-border-subtle/70 bg-card shadow-xl shadow-black/20">
-        <ChatInterface />
-      </div>
+      {!USE_REAL_API ? (
+        <div className="mt-8 h-[36rem] overflow-hidden rounded-3xl border border-border-subtle/70 bg-card shadow-xl shadow-black/20">
+          <ChatInterface />
+        </div>
+      ) : (
+        <>
+          <div className="mt-8 lg:hidden">
+            <button
+              type="button"
+              onClick={() => setIsDrawerOpen((prev) => !prev)}
+              className="flex w-full items-center justify-between rounded-2xl border border-border-subtle/70 bg-card px-4 py-3 text-sm font-semibold text-cream"
+            >
+              <span className="truncate">{activeConversation?.title || 'Select a conversation'}</span>
+              <ChevronDownIcon
+                className={`h-4 w-4 shrink-0 transition-transform ${isDrawerOpen ? 'rotate-180' : ''}`}
+              />
+            </button>
+            {isDrawerOpen && (
+              <div className="mt-2 h-72 overflow-hidden rounded-2xl border border-border-subtle/70 bg-card shadow-xl shadow-black/20">
+                <ConversationList
+                  conversations={conversations}
+                  activeId={activeId}
+                  isLoading={isLoadingList}
+                  error={listError}
+                  isCreating={isCreating}
+                  onSelect={handleSelect}
+                  onCreate={handleCreate}
+                  onRename={handleRename}
+                  onDelete={handleDelete}
+                />
+              </div>
+            )}
+          </div>
+
+          <div className="mt-4 grid gap-4 lg:mt-8 lg:grid-cols-[18rem_1fr]">
+            <div className="hidden overflow-hidden rounded-3xl border border-border-subtle/70 bg-card shadow-xl shadow-black/20 lg:block lg:h-[36rem]">
+              <ConversationList
+                conversations={conversations}
+                activeId={activeId}
+                isLoading={isLoadingList}
+                error={listError}
+                isCreating={isCreating}
+                onSelect={handleSelect}
+                onCreate={handleCreate}
+                onRename={handleRename}
+                onDelete={handleDelete}
+              />
+            </div>
+
+            <div className="h-[36rem] overflow-hidden rounded-3xl border border-border-subtle/70 bg-card shadow-xl shadow-black/20">
+              {activeId ? (
+                <ChatInterface conversationId={activeId} onConversationUpdated={upsertConversation} />
+              ) : (
+                <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center">
+                  <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-ember/15 text-ember-light">
+                    <ChefHatIcon className="h-6 w-6" />
+                  </span>
+                  <p className="text-sm text-muted">
+                    {isLoadingList ? 'Loading...' : 'Start a new conversation to chat with Robo Chef.'}
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        </>
+      )}
     </div>
   )
 }

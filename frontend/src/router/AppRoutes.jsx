@@ -44,7 +44,14 @@ export default function AppRoutes() {
           </RequireAuth>
         }
       />
-      <Route path="/robo-chef" element={<RoboChefPage />} />
+      <Route
+        path="/robo-chef"
+        element={
+          <RequireAuth>
+            <RoboChefPage />
+          </RequireAuth>
+        }
+      />
       <Route path="/login" element={<SignInPage />} />
       <Route path="/signup" element={<SignUpPage />} />
       <Route path="/verify" element={<VerifyCodePage />} />
