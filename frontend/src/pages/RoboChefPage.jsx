@@ -124,7 +124,7 @@ export default function RoboChefPage() {
             <div className="flex justify-end">
               <NewConversationButton label="New chat" onClick={handleCreate} isCreating={isCreating} fullWidth={false} />
             </div>
-            <div className="h-64 overflow-hidden rounded-2xl border border-border-subtle/70 bg-card shadow-xl shadow-black/20">
+            <div className="overflow-hidden rounded-2xl border border-border-subtle/70 bg-card shadow-xl shadow-black/20">
               <ConversationList
                 conversations={conversations}
                 activeId={activeId}
@@ -138,9 +138,9 @@ export default function RoboChefPage() {
           </div>
 
           <div className="mt-4 grid gap-4 lg:mt-8 lg:grid-cols-[18rem_1fr]">
-            <div className="hidden lg:flex lg:h-[36rem] lg:flex-col lg:gap-3">
+            <div className="hidden lg:flex lg:flex-col lg:gap-3 lg:self-start">
               <NewConversationButton label="New conversation" onClick={handleCreate} isCreating={isCreating} />
-              <div className="flex-1 overflow-hidden rounded-3xl border border-border-subtle/70 bg-card shadow-xl shadow-black/20">
+              <div className="overflow-hidden rounded-3xl border border-border-subtle/70 bg-card shadow-xl shadow-black/20">
                 <ConversationList
                   conversations={conversations}
                   activeId={activeId}
