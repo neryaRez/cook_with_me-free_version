@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import ChatInterface from '../components/ChatInterface.jsx'
 import ConversationList from '../components/ConversationList.jsx'
-import { ChefHatIcon, SparklesIcon, ChevronDownIcon, PlusIcon } from '../components/icons.jsx'
+import { ChefHatIcon, SparklesIcon, PlusIcon } from '../components/icons.jsx'
 import {
   USE_REAL_API,
   getConversations,
@@ -16,14 +16,18 @@ function sortByUpdatedAtDesc(conversations) {
 
 // A standalone primary action, deliberately separate from the conversation
 // list panel below it so it reads as its own action rather than a control
-// embedded inside the picker.
-function NewConversationButton({ label, onClick, isCreating }) {
+// embedded inside the picker. Full-width in the desktop sidebar (where a
+// filled column-width button reads naturally); compact and inline on
+// mobile, where a full-width bar would feel oversized in a small row.
+function NewConversationButton({ label, onClick, isCreating, fullWidth = true }) {
   return (
     <button
       type="button"
       onClick={onClick}
       disabled={isCreating}
-      className="flex w-full items-center justify-center gap-1.5 rounded-full bg-ember px-4 py-2.5 text-sm font-semibold text-cream shadow-lg shadow-ember/20 transition-transform hover:scale-[1.02] disabled:cursor-not-allowed disabled:opacity-40"
+      className={`inline-flex items-center justify-center gap-1.5 rounded-full bg-ember px-5 py-2.5 text-sm font-semibold text-cream shadow-lg shadow-ember/20 transition-transform hover:scale-[1.02] disabled:cursor-not-allowed disabled:opacity-40 ${
+        fullWidth ? 'w-full' : 'w-auto'
+      }`}
     >
       <PlusIcon className="h-4 w-4" />
       {isCreating ? 'Creating...' : label}
@@ -37,7 +41,6 @@ export default function RoboChefPage() {
   const [isLoadingList, setIsLoadingList] = useState(USE_REAL_API)
   const [listError, setListError] = useState(null)
   const [isCreating, setIsCreating] = useState(false)
-  const [isDrawerOpen, setIsDrawerOpen] = useState(false)
 
   const loadConversations = useCallback(() => {
     if (!USE_REAL_API) return
@@ -69,7 +72,6 @@ export default function RoboChefPage() {
       const conversation = await createConversation()
       setConversations((prev) => [conversation, ...prev])
       setActiveId(conversation.id)
-      setIsDrawerOpen(false)
     } catch {
       setListError('Could not start a new conversation. Please try again.')
     } finally {
@@ -79,7 +81,6 @@ export default function RoboChefPage() {
 
   function handleSelect(id) {
     setActiveId(id)
-    setIsDrawerOpen(false)
   }
 
   async function handleRename(id, title) {
@@ -95,8 +96,6 @@ export default function RoboChefPage() {
       return remaining
     })
   }
-
-  const activeConversation = conversations.find((c) => c.id === activeId) || null
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6 lg:px-8">
@@ -121,33 +120,21 @@ export default function RoboChefPage() {
         </div>
       ) : (
         <>
-          <div className="mt-8 lg:hidden">
-            <button
-              type="button"
-              onClick={() => setIsDrawerOpen((prev) => !prev)}
-              className="flex w-full items-center justify-between rounded-2xl border border-border-subtle/70 bg-card px-4 py-3 text-sm font-semibold text-cream"
-            >
-              <span className="truncate">{activeConversation?.title || 'Select a conversation'}</span>
-              <ChevronDownIcon
-                className={`h-4 w-4 shrink-0 transition-transform ${isDrawerOpen ? 'rotate-180' : ''}`}
+          <div className="mt-8 space-y-2 lg:hidden">
+            <div className="flex justify-end">
+              <NewConversationButton label="New chat" onClick={handleCreate} isCreating={isCreating} fullWidth={false} />
+            </div>
+            <div className="h-64 overflow-hidden rounded-2xl border border-border-subtle/70 bg-card shadow-xl shadow-black/20">
+              <ConversationList
+                conversations={conversations}
+                activeId={activeId}
+                isLoading={isLoadingList}
+                error={listError}
+                onSelect={handleSelect}
+                onRename={handleRename}
+                onDelete={handleDelete}
               />
-            </button>
-            {isDrawerOpen && (
-              <div className="mt-2 space-y-2">
-                <NewConversationButton label="New chat" onClick={handleCreate} isCreating={isCreating} />
-                <div className="h-64 overflow-hidden rounded-2xl border border-border-subtle/70 bg-card shadow-xl shadow-black/20">
-                  <ConversationList
-                    conversations={conversations}
-                    activeId={activeId}
-                    isLoading={isLoadingList}
-                    error={listError}
-                    onSelect={handleSelect}
-                    onRename={handleRename}
-                    onDelete={handleDelete}
-                  />
-                </div>
-              </div>
-            )}
+            </div>
           </div>
 
           <div className="mt-4 grid gap-4 lg:mt-8 lg:grid-cols-[18rem_1fr]">
